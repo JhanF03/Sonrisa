@@ -51,6 +51,10 @@ export interface TenantRow {
   max_pending_online_per_patient: number;
   auto_release_hours: number;
   payment_window_minutes: number;
+  paid_until: string | null;
+  monthly_price: number;
+  grace_days: number;
+  billing_mode: 'auto' | 'exento' | 'suspendido';
 }
 
 /** Quién está haciendo la petición (usuario autenticado). */

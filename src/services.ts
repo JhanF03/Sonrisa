@@ -13,6 +13,7 @@ import { CatalogService } from './modules/catalog/catalogService.js';
 import { InventoryService } from './modules/inventory/inventoryService.js';
 import { PurchaseService } from './modules/inventory/purchaseService.js';
 import { EInvoiceService } from './modules/einvoicing/einvoiceService.js';
+import { PlatformService } from './modules/platform/platformService.js';
 import { MaintenanceService } from './modules/maintenance/maintenanceService.js';
 import { PatientService } from './modules/patients/patientService.js';
 import { PaymentService } from './modules/payments/paymentService.js';
@@ -44,6 +45,7 @@ export interface AppServices {
   inventory: InventoryService;
   purchases: PurchaseService;
   einvoices: EInvoiceService;
+  platform: PlatformService;
   turnstile: TurnstileVerifier;
 }
 
@@ -98,6 +100,7 @@ export function createServices(db: SqlDatabase, config: AppConfig, external: Ext
     inventory,
     purchases: new PurchaseService(db, audit, inventory),
     einvoices: new EInvoiceService(db, config, audit, external.fetch),
+    platform: new PlatformService(db, config, auth, new WompiApi(external.fetch)),
     turnstile: new TurnstileVerifier(config.turnstileSecretKey, external.fetch),
   };
 }

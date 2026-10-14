@@ -9,7 +9,7 @@
  */
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { isHoldExpired, type AppointmentRow } from '../../modules/appointments/appointmentService.js';
+import { isHoldExpired, isTenantSuspended, type AppointmentRow } from '../../modules/appointments/appointmentService.js';
 import { MAX_AVAILABILITY_RANGE_DAYS } from '../../modules/appointments/availabilityService.js';
 import { computePrepaymentAmount } from '../../modules/catalog/catalogService.js';
 import { createAppointmentToken, verifyAppointmentToken } from '../../security/appointmentLinks.js';
@@ -76,7 +76,7 @@ export function registerPublicRoutes(app: Hono<AppEnv>): void {
           whatsappNumber: tenant.whatsapp_number,
           address: tenant.address,
           city: tenant.city,
-          onlineBookingEnabled: tenant.online_booking_enabled === 1,
+          onlineBookingEnabled: tenant.online_booking_enabled === 1 && !isTenantSuspended(tenant),
           bookingWindowDays: tenant.booking_window_days,
           privacyPolicyVersion: tenant.privacy_policy_version,
           isShowcase: tenant.is_showcase === 1,

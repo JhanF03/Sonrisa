@@ -5,7 +5,7 @@ import type { SqlDatabase, SqlStatement } from '../../db/database.js';
 import type { Actor, TenantRow } from '../../http/context.js';
 import { AppError, conflict, notFound } from '../../http/errors.js';
 import { DEFAULT_ROLES } from '../../security/permissions.js';
-import { isoNow } from '../../utils/time.js';
+import { addDays, isoNow, todayLocal } from '../../utils/time.js';
 import type { AuditService } from '../audit/auditService.js';
 
 export interface TenantSettingsInput {
@@ -44,7 +44,15 @@ export interface NewTenantInput {
   brandColor?: string;
   logoUrl?: string | null;
   isShowcase?: boolean;
+  /** Suscripción (solo consultorios reales). */
+  paidUntil?: string | null;
+  monthlyPrice?: number;
+  graceDays?: number;
+  billingMode?: 'auto' | 'exento';
 }
+
+/** Si no se indica, un consultorio real arranca con 30 días cubiertos. */
+const DEFAULT_INITIAL_DAYS = 30;
 
 export interface NewAdminInput {
   fullName: string;
@@ -142,12 +150,14 @@ export class TenantService {
     const statements: SqlStatement[] = [
       this.db
         .prepare(
-          `INSERT INTO tenants (id, slug, name, city, phone, brand_color, logo_url, is_showcase, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO tenants (id, slug, name, city, phone, brand_color, logo_url, is_showcase, paid_until, monthly_price, grace_days, billing_mode, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           tenantId, slug, tenantInput.name, tenantInput.city ?? null, tenantInput.phone ?? null,
-          tenantInput.brandColor ?? '#3f6f68', tenantInput.logoUrl ?? null, tenantInput.isShowcase ? 1 : 0, now,
+          tenantInput.brandColor ?? '#3f6f68', tenantInput.logoUrl ?? null, tenantInput.isShowcase ? 1 : 0,
+          tenantInput.isShowcase ? null : (tenantInput.paidUntil ?? addDays(todayLocal(-300), DEFAULT_INITIAL_DAYS)),
+          tenantInput.monthlyPrice ?? 0, tenantInput.graceDays ?? 3, tenantInput.billingMode ?? 'auto', now,
         ),
       this.db
         .prepare(

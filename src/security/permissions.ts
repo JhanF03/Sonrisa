@@ -60,6 +60,9 @@ export const PERMISSION_CATALOG = {
   'facturacion.anular': { module: 'Facturación', label: 'Anular facturas (con nota crédito)' },
   'facturacion.configurar': { module: 'Facturación', label: 'Configurar el proveedor de facturación electrónica' },
 
+  // Suscripción
+  'suscripcion.pagar': { module: 'Suscripción', label: 'Ver y pagar la suscripción de Agenda Sonrisa' },
+
   // Reportes
   'reportes.ver': { module: 'Reportes', label: 'Ver indicadores' },
 

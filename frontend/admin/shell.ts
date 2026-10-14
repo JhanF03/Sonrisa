@@ -2,11 +2,13 @@
  * Estructura del panel: menú lateral filtrado por permisos, barra superior y
  * enrutador por hash (#/agenda, #/pacientes/123…).
  */
-import { api, setUnauthorizedHandler } from '../core/api.js';
+import { api, setSuspendedHandler, setUnauthorizedHandler } from '../core/api.js';
 import { $, html, raw, readForm, safeUrl, setContent, type SafeHtml } from '../core/dom.js';
 import { applyBrandColor, icon, openFormModal, refreshIcons, themeToggleButton, toast } from '../core/ui.js';
 import { renderLogin } from './login.js';
 import { can, loadSession, session } from './session.js';
+import { renderSubscriptionView, renderSuspendedScreen, subscriptionBanner } from './subscription.js';
+import { maybeShowWelcome, openContextHelp, renderHelpView, VIEW_RENDERED_EVENT } from './help/helpCenter.js';
 import { renderAgendaView } from './views/agendaView.js';
 import { renderAuditView } from './views/auditView.js';
 import { renderCashView } from './views/cashView.js';
@@ -47,8 +49,10 @@ const NAV_ITEMS: NavItem[] = [
   { path: 'servicios', label: 'Servicios', iconName: 'stethoscope', tooltip: 'Catálogo, precios y duración', permissions: ['servicios.ver', 'servicios.gestionar'], section: 'Administración', render: renderServicesView },
   { path: 'inventario', label: 'Inventario', iconName: 'package', tooltip: 'Insumos, existencias, movimientos y costo por servicio', permissions: ['inventario.ver'], section: 'Administración', render: renderInventoryView },
   { path: 'configuracion', label: 'Configuración', iconName: 'settings', tooltip: 'Consultorio, profesionales, horarios y bloqueos', permissions: ['configuracion.consultorio', 'configuracion.profesionales', 'agenda.bloquear', 'pagos.configurar'], section: 'Administración', render: renderSettingsView },
+  { path: 'suscripcion', label: 'Mi suscripción', iconName: 'badge-check', tooltip: 'Estado y pago de Agenda Sonrisa', permissions: ['suscripcion.pagar'], section: 'Administración', render: renderSubscriptionView },
   { path: 'usuarios', label: 'Usuarios y roles', iconName: 'shield-check', tooltip: 'Accesos y permisos granulares', permissions: ['usuarios.gestionar', 'roles.gestionar'], section: 'Administración', render: renderUsersView },
   { path: 'auditoria', label: 'Auditoría', iconName: 'scroll-text', tooltip: 'Quién hizo qué y cuándo', permissions: ['auditoria.ver'], section: 'Administración', render: renderAuditView },
+  { path: 'ayuda', label: 'Aprende a usarlo', iconName: 'graduation-cap', tooltip: 'Guías paso a paso y recorridos guiados de cada módulo', permissions: [], section: 'Administración', render: renderHelpView },
 ];
 
 let appRoot: HTMLElement;
@@ -72,14 +76,37 @@ export async function startAdminApp(root: HTMLElement): Promise<void> {
     renderLogin(appRoot, () => void startAdminApp(appRoot));
   });
   applyBrandColor(sessionInfo.clinic.brandColor);
+
+  // Sin pago: en vez del panel se muestra cómo reactivar el acceso.
+  const showSuspended = () =>
+    renderSuspendedScreen(
+      root,
+      async () => {
+        isShellListenerAttached = false;
+        await startAdminApp(root);
+      },
+      async () => {
+        await api.post('/api/auth/logout');
+        window.location.hash = '';
+        await startAdminApp(root);
+      },
+    );
+  setSuspendedHandler(() => void startAdminApp(root));
+  if (sessionInfo.subscription.blocked) {
+    root.onclick = null;
+    await showSuspended();
+    return;
+  }
+  root.onclick = null;
   renderShell();
+  window.setTimeout(maybeShowWelcome, 600);
   window.removeEventListener('hashchange', handleRoute);
   window.addEventListener('hashchange', handleRoute);
   await handleRoute();
 }
 
 function allowedNavItems(): NavItem[] {
-  return NAV_ITEMS.filter((item) => can(...item.permissions));
+  return NAV_ITEMS.filter((item) => item.permissions.length === 0 || can(...item.permissions));
 }
 
 function renderShell(): void {
@@ -104,6 +131,7 @@ function renderShell(): void {
     html`${clinic.isShowcase
         ? html`<div class="showcase-banner">${icon('sparkles')} Esta es una demostración con datos ficticios. Explora con libertad: nada de lo que hagas afecta a pacientes reales.</div>`
         : ''}
+      ${subscriptionBanner() ?? ''}
       <div class="shell" id="shell">
         <aside class="sidebar" aria-label="Menú principal">
           <div class="brand">
@@ -127,7 +155,9 @@ function renderShell(): void {
               <button class="icon-button menu-button" type="button" data-action="toggle-menu" aria-label="Abrir menú">${icon('menu')}</button>
               <span id="view-title"></span>
             </div>
-            <div class="topbar-actions" id="topbar-actions">${themeToggleButton()}</div>
+            <div class="topbar-actions" id="topbar-actions">
+              <button class="icon-button" type="button" data-action="open-help" aria-label="Ayuda de esta pantalla" data-tooltip="¿Cómo se usa esta pantalla?" data-tooltip-position="bottom">${icon('circle-help')}</button>
+              ${themeToggleButton()}</div>
           </header>
           <main class="content" id="view-container"></main>
         </div>
@@ -147,6 +177,7 @@ function renderShell(): void {
       await startAdminApp(appRoot);
     }
     if (target.closest('[data-action="change-password"]')) openChangePasswordModal();
+    if (target.closest('[data-action="open-help"]')) openContextHelp();
   });
 }
 
@@ -175,6 +206,7 @@ async function handleRoute(): Promise<void> {
   try {
     await item.render(container, params);
     refreshIcons(container);
+    document.dispatchEvent(new CustomEvent(VIEW_RENDERED_EVENT, { detail: item.path }));
   } catch (error) {
     setContent(container, html`<div class="card card-padded form-error">${error instanceof Error ? error.message : 'No se pudo cargar.'}</div>`);
   }

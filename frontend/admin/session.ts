@@ -4,6 +4,7 @@
  * validar en cada petición.
  */
 import { api } from '../core/api.js';
+import type { SubscriptionStatus } from '../../src/shared/subscription.js';
 
 export interface SessionInfo {
   user: { id: string; email: string; fullName: string; professionalId: string | null };
@@ -17,6 +18,7 @@ export interface SessionInfo {
     isShowcase: boolean;
     utcOffsetMinutes: number;
   };
+  subscription: SubscriptionStatus & { monthlyPrice: number };
 }
 
 let currentSession: SessionInfo | null = null;

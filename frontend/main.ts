@@ -11,6 +11,7 @@ import { renderBookingPage } from './public/booking.js';
 import { renderManagePage } from './public/manage.js';
 import { renderPaymentResultPage } from './public/paymentResult.js';
 import { renderPlatformPage } from './public/platform.js';
+import { renderSubscriptionPaymentReturn } from './admin/subscription.js';
 
 const root = document.getElementById('root') as HTMLElement;
 const pathSegments = window.location.pathname.split('/').filter(Boolean).map(decodeURIComponent);
@@ -21,6 +22,8 @@ if (pathSegments[0] === 'c' && pathSegments[1] && pathSegments[2] === 'pago' && 
   void renderManagePage(root, pathSegments[3]);
 } else if (pathSegments[0] === 'c' && pathSegments[1]) {
   void renderBookingPage(root, pathSegments[1]);
+} else if (pathSegments[0] === 'suscripcion' && pathSegments[1] === 'pago') {
+  void renderSubscriptionPaymentReturn(root);
 } else if (pathSegments[0] === 'plataforma') {
   renderPlatformPage(root);
 } else {

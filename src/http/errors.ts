@@ -5,7 +5,7 @@
 export class AppError extends Error {
   constructor(
     message: string,
-    readonly statusCode: 400 | 401 | 403 | 404 | 409 | 410 | 422 | 429 | 500 = 400,
+    readonly statusCode: 400 | 401 | 402 | 403 | 404 | 409 | 410 | 422 | 429 | 500 = 400,
     readonly errorCode = 'BAD_REQUEST',
   ) {
     super(message);

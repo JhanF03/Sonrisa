@@ -11,6 +11,7 @@ import {
   TrendingUp, TriangleAlert, Undo2, User, UserCheck, UserPlus, Users, UserX, Wallet, X,
   MessageSquareText, Send, Webhook, PlugZap, Shield,
   Package, Truck, FileUp, Boxes, ArrowDownUp, Calculator, Scale, FileText,
+  ArrowRight, CircleX, LogIn, GraduationCap, LifeBuoy, BookOpen, CirclePlay, BadgeCheck, LayoutDashboard, Ellipsis, Mouse,
 } from 'lucide';
 import { $, html, safeUrl, setContent, type SafeHtml } from './dom.js';
 import { whatsappLink } from './format.js';
@@ -24,6 +25,7 @@ const ICONS = {
   TriangleAlert, Undo2, User, UserCheck, UserPlus, Users, UserX, Wallet, X,
   MessageSquareText, Send, Webhook, PlugZap, Shield,
   Package, Truck, FileUp, Boxes, ArrowDownUp, Calculator, Scale, FileText,
+  ArrowRight, CircleX, LogIn, GraduationCap, LifeBuoy, BookOpen, CirclePlay, BadgeCheck, LayoutDashboard, Ellipsis, Mouse,
 };
 
 /** Reemplaza los <i data-lucide="nombre"> por sus SVG. */

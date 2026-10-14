@@ -7,7 +7,9 @@
  *      que sin sesión o sin permiso la respuesta es 401/403.
  */
 import type { Hono, MiddlewareHandler } from 'hono';
-import { forbidden, unauthorized } from './errors.js';
+import { AppError, forbidden, unauthorized } from './errors.js';
+import { computeSubscription } from '../shared/subscription.js';
+import { todayLocal } from '../utils/time.js';
 import type { AppContext, AppEnv } from './context.js';
 import type { Permission } from '../security/permissions.js';
 
@@ -23,6 +25,8 @@ export interface RouteDefinition {
   path: string;
   access: RouteAccess;
   handler: (context: AppContext) => Promise<Response> | Response;
+  /** Disponible aunque la suscripción esté suspendida (sesión, estado y pago). */
+  allowWhenSuspended?: boolean;
 }
 
 export interface RegisteredRoute {
@@ -49,16 +53,30 @@ export function defineRoutes(app: Hono<AppEnv>, routes: RouteDefinition[]): void
       path: route.path,
       access: route.access,
     });
-    app.on(route.method, route.path, accessGuard(route.access), (context) => route.handler(context));
+    app.on(route.method, route.path, accessGuard(route.access, route.allowWhenSuspended === true), (context) => route.handler(context));
   }
 }
 
-function accessGuard(access: RouteAccess): MiddlewareHandler<AppEnv> {
+/** Error 402: el consultorio no tiene el pago al día. La interfaz muestra cómo reactivarlo. */
+export const SUBSCRIPTION_SUSPENDED = 'SUBSCRIPTION_SUSPENDED';
+
+function accessGuard(access: RouteAccess, allowWhenSuspended: boolean): MiddlewareHandler<AppEnv> {
   return async (context, next) => {
     if (access.type === 'public') return next();
 
     const auth = context.get('auth');
     if (!auth) throw unauthorized();
+
+    if (!allowWhenSuspended) {
+      const tenant = auth.tenant;
+      const subscription = computeSubscription(
+        { isShowcase: tenant.is_showcase === 1, billingMode: tenant.billing_mode, paidUntil: tenant.paid_until, graceDays: tenant.grace_days },
+        todayLocal(tenant.utc_offset_minutes),
+      );
+      if (subscription.blocked) {
+        throw new AppError('El acceso está suspendido por falta de pago de la suscripción.', 402, SUBSCRIPTION_SUSPENDED);
+      }
+    }
 
     if (access.type === 'permission' && !access.anyOf.some((permission) => auth.permissions.has(permission))) {
       throw forbidden();

@@ -1,24 +1,28 @@
 /**
- * Rutas de plataforma (solo para ti, el proveedor del software):
- * • Crear un consultorio real para un cliente nuevo.
- * • Modo vitrina: crear en segundos una demo personalizada para un prospecto.
- *
- * Protegidas con la clave PLATFORM_ADMIN_KEY (secreto de Cloudflare / .env),
- * comparada en tiempo constante y con límite de intentos por IP.
+ * Rutas de plataforma (solo para ti, el dueño del software):
+ * • Ingreso con la clave PLATFORM_ADMIN_KEY → sesión segura (cookie HttpOnly,
+ *   SameSite=Strict, 8 horas). La clave también se acepta en la cabecera
+ *   X-Platform-Key (automatizaciones).
+ * • Panel: consultorios reales y demos, suscripciones, pagos, restablecer la
+ *   clave del administrador, configuración de cobro y registro de auditoría.
  */
 import type { Hono } from 'hono';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 import { seedDemoData } from '../../modules/platform/demoDataService.js';
+import { SUBSCRIPTION_PAYMENT_METHODS } from '../../modules/platform/platformService.js';
 import { constantTimeEqualText, generateSecureToken } from '../../security/crypto.js';
 import { RATE_LIMIT_RULES } from '../../security/rateLimiter.js';
 import type { AppContext, AppEnv } from '../context.js';
 import { AppError } from '../errors.js';
 import { defineRoutes, publicAccess } from '../routeRegistry.js';
-import { hexColorSchema, httpsUrlSchema, optionalText, readJsonBody, requiredText } from '../validation.js';
+import { hexColorSchema, httpsUrlSchema, localDateSchema, moneySchema, optionalText, positiveMoneySchema, readIdParam, readJsonBody, requiredText } from '../validation.js';
 import { PASSWORD_POLICY } from './authRoutes.js';
 
 export const PLATFORM_KEY_HEADER = 'X-Platform-Key';
 const MIN_PLATFORM_KEY_LENGTH = 24;
+
+const platformCookieName = (url: string) => (new URL(url).protocol === 'https:' ? '__Host-psid' : 'psid');
 
 const clinicBaseSchema = z.object({
   clinicName: requiredText(120, 'El nombre del consultorio'),
@@ -30,12 +34,195 @@ const clinicBaseSchema = z.object({
 
 export function registerPlatformRoutes(app: Hono<AppEnv>): void {
   defineRoutes(app, [
+    // ─── Sesión ───
+    {
+      method: 'POST',
+      path: '/api/platform/login',
+      access: publicAccess,
+      handler: async (context) => {
+        const { key } = await readJsonBody(context, z.object({ key: z.string().max(300) }));
+        await assertKey(context, key);
+        const { token, expiresAt } = await context.get('services').platform.createSession(context.get('clientIp'));
+        setCookie(context, platformCookieName(context.req.url), token, {
+          httpOnly: true,
+          secure: new URL(context.req.url).protocol === 'https:',
+          sameSite: 'Strict',
+          path: '/',
+          expires: new Date(expiresAt),
+        });
+        return context.json({ ok: true, expiresAt });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/platform/logout',
+      access: publicAccess,
+      handler: async (context) => {
+        const cookieName = platformCookieName(context.req.url);
+        await context.get('services').platform.destroySession(getCookie(context, cookieName));
+        deleteCookie(context, cookieName, { path: '/', secure: cookieName.startsWith('__Host-') });
+        return context.json({ ok: true });
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/platform/session',
+      access: publicAccess,
+      handler: async (context) =>
+        context.json({ authenticated: await context.get('services').platform.isValidSession(getCookie(context, platformCookieName(context.req.url))) }),
+    },
+
+    // ─── Panel ───
+    {
+      method: 'GET',
+      path: '/api/platform/summary',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        return context.json(await context.get('services').platform.getSummary());
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/platform/tenants',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        return context.json(await context.get('services').platform.listTenants());
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/platform/tenants/:id/payments',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        return context.json(await context.get('services').platform.listPayments(readIdParam(context)));
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/api/platform/tenants/:id/subscription',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        const input = await readJsonBody(
+          context,
+          z.object({
+            monthlyPrice: moneySchema.max(100_000_000),
+            graceDays: z.number().int().min(0).max(60),
+            billingMode: z.enum(['auto', 'exento', 'suspendido']),
+            paidUntil: localDateSchema.nullable(),
+            ownerNotes: optionalText(1000),
+          }),
+        );
+        return context.json(await context.get('services').platform.updateSubscription(readIdParam(context), input, context.get('clientIp')));
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/platform/tenants/:id/payments',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        const input = await readJsonBody(
+          context,
+          z.object({
+            amount: positiveMoneySchema.max(1_000_000_000),
+            months: z.number().int().min(1).max(24),
+            method: z.enum(SUBSCRIPTION_PAYMENT_METHODS),
+            reference: optionalText(80),
+            notes: optionalText(300),
+          }),
+        );
+        const platform = context.get('services').platform;
+        const tenantId = readIdParam(context);
+        await platform.registerPayment(tenantId, input, context.get('clientIp'));
+        return context.json(await platform.getTenantOverview(tenantId), 201);
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/platform/subscription-payments/:id/void',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        const { reason } = await readJsonBody(context, z.object({ reason: requiredText(200, 'El motivo') }));
+        await context.get('services').platform.voidPayment(readIdParam(context), reason, context.get('clientIp'));
+        return context.json({ ok: true });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/platform/tenants/:id/reset-admin-password',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        return context.json(await context.get('services').platform.resetAdminPassword(readIdParam(context), context.get('clientIp')));
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/platform/settings',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        const platform = context.get('services').platform;
+        const [settings, defaults] = await Promise.all([platform.getSettings(), platform.getDefaults()]);
+        return context.json({ ...settings, webhookUrl: `${new URL(context.req.url).origin}/api/webhooks/wompi-plataforma`, defaults });
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/api/platform/settings',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        const optionalSecret = z.string().trim().max(300).nullable().default(null).transform((value) => value || null);
+        const input = await readJsonBody(
+          context,
+          z.object({
+            ownerName: optionalText(120),
+            ownerWhatsapp: optionalText(30),
+            paymentInstructions: optionalText(2000),
+            defaultMonthlyPrice: moneySchema.max(100_000_000),
+            defaultGraceDays: z.number().int().min(0).max(60),
+            defaultTrialDays: z.number().int().min(0).max(365),
+            wompiEnvironment: z.enum(['sandbox', 'production']).nullable(),
+            wompiPublicKey: optionalSecret,
+            wompiIntegritySecret: optionalSecret,
+            wompiEventsSecret: optionalSecret,
+          }),
+        );
+        return context.json(await context.get('services').platform.saveSettings(input, context.get('clientIp')));
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/platform/settings/test-wompi',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        return context.json(await context.get('services').platform.testWompi());
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/platform/audit',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        return context.json(await context.get('services').platform.listAudit());
+      },
+    },
+
+    // ─── Crear consultorios ───
     {
       method: 'POST',
       path: '/api/platform/showcase',
       access: publicAccess,
       handler: async (context) => {
-        await assertPlatformKey(context);
+        await assertPlatform(context);
         const input = await readJsonBody(context, clinicBaseSchema);
         const services = context.get('services');
 
@@ -47,17 +234,10 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
         );
         const tenant = await services.tenants.getById(tenantId);
         await seedDemoData(context.get('db'), tenantId, tenant.utc_offset_minutes, adminUserId);
+        await services.platform.auditClinicCreated(tenantId, 'demo', context.get('clientIp'));
 
         const origin = new URL(context.req.url).origin;
-        return context.json(
-          {
-            slug,
-            bookingUrl: `${origin}/c/${slug}`,
-            panelUrl: `${origin}/app`,
-            login: { email: demoEmail, password: demoPassword },
-          },
-          201,
-        );
+        return context.json({ slug, bookingUrl: `${origin}/c/${slug}`, panelUrl: `${origin}/app`, login: { email: demoEmail, password: demoPassword } }, 201);
       },
     },
     {
@@ -65,40 +245,52 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       path: '/api/platform/clinics',
       access: publicAccess,
       handler: async (context) => {
-        await assertPlatformKey(context);
+        await assertPlatform(context);
+        const services = context.get('services');
+        const defaults = await services.platform.getDefaults();
         const input = await readJsonBody(
           context,
           clinicBaseSchema.extend({
             adminFullName: requiredText(120, 'El nombre del administrador'),
             adminEmail: z.email('Correo inválido.').max(200),
             adminPassword: PASSWORD_POLICY,
+            monthlyPrice: moneySchema.max(100_000_000).default(defaults.monthlyPrice),
+            graceDays: z.number().int().min(0).max(60).default(defaults.graceDays),
+            paidUntil: localDateSchema.default(defaults.trialUntil),
           }),
         );
-        const services = context.get('services');
-        const { slug } = await services.tenants.createTenant(
-          { name: input.clinicName, city: input.city, phone: input.phone, brandColor: input.brandColor, logoUrl: input.logoUrl },
+        const { slug, tenantId } = await services.tenants.createTenant(
           {
-            fullName: input.adminFullName,
-            email: input.adminEmail,
-            passwordHash: await services.auth.hashNewPassword(input.adminPassword),
+            name: input.clinicName, city: input.city, phone: input.phone, brandColor: input.brandColor, logoUrl: input.logoUrl,
+            paidUntil: input.paidUntil, monthlyPrice: input.monthlyPrice, graceDays: input.graceDays,
           },
+          { fullName: input.adminFullName, email: input.adminEmail, passwordHash: await services.auth.hashNewPassword(input.adminPassword) },
         );
+        await services.platform.auditClinicCreated(tenantId, 'real', context.get('clientIp'));
         const origin = new URL(context.req.url).origin;
-        return context.json({ slug, bookingUrl: `${origin}/c/${slug}`, panelUrl: `${origin}/app` }, 201);
+        return context.json({ slug, bookingUrl: `${origin}/c/${slug}`, panelUrl: `${origin}/app`, paidUntil: input.paidUntil }, 201);
       },
     },
   ]);
 }
 
-async function assertPlatformKey(context: AppContext): Promise<void> {
+/** Compara la clave en tiempo constante, con límite de intentos por IP. */
+async function assertKey(context: AppContext, providedKey: string): Promise<void> {
   await context.get('services').rateLimiter.consume(`platform:${context.get('clientIp')}`, RATE_LIMIT_RULES.platformPerIp);
-
   const configuredKey = context.get('config').platformAdminKey;
   if (configuredKey.length < MIN_PLATFORM_KEY_LENGTH) {
     throw new AppError('La plataforma no está habilitada en este servidor.', 403, 'PLATFORM_DISABLED');
   }
-  const providedKey = context.req.header(PLATFORM_KEY_HEADER) ?? '';
   if (!(await constantTimeEqualText(providedKey, configuredKey))) {
     throw new AppError('Clave de plataforma incorrecta.', 403, 'PLATFORM_FORBIDDEN');
   }
+}
+
+/** Acceso de plataforma: sesión válida (cookie) o clave en la cabecera. */
+async function assertPlatform(context: AppContext): Promise<void> {
+  const platform = context.get('services').platform;
+  if (await platform.isValidSession(getCookie(context, platformCookieName(context.req.url)))) return;
+  const headerKey = context.req.header(PLATFORM_KEY_HEADER);
+  if (headerKey !== undefined) return assertKey(context, headerKey);
+  throw new AppError('Ingresa a la plataforma con tu clave.', 401, 'PLATFORM_LOGIN_REQUIRED');
 }

@@ -95,7 +95,7 @@ async function createDemoClinicIfEmpty(): Promise<void> {
   const adminPassword = process.env.DEMO_ADMIN_PASSWORD || `Demo-${generateSecureToken(8)}7`;
   const tenantService = new TenantService(database, new AuditService(database));
   const { tenantId, slug, adminUserId } = await tenantService.createTenant(
-    { name: 'Consultorio Demo Sonrisa', city: 'Medellín', phone: '+57 604 000 0000' },
+    { name: 'Consultorio Demo Sonrisa', city: 'Medellín', phone: '+57 604 000 0000', billingMode: 'exento' },
     { fullName: 'Administrador', email: adminEmail, passwordHash: await hashPassword(adminPassword, config.passwordHashIterations) },
   );
   await seedDemoData(database, tenantId, -300, adminUserId);

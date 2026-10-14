@@ -478,7 +478,7 @@ describe('Seguridad', () => {
         headers: { 'X-Real-IP': 'plataforma-2', 'X-Platform-Key': 'incorrecta' },
         body: { clinicName: 'Demo' },
       });
-      assert.equal(withoutKey.status, 403);
+      assert.equal(withoutKey.status, 401, 'Sin sesión ni clave: debe ingresar');
       assert.equal(wrongKey.status, 403);
     });
 

@@ -453,3 +453,71 @@ tr.is-muted td { opacity: 0.55; }
 .detail-grid > div { display: flex; flex-direction: column; gap: 2px; }
 .detail-grid small { color: var(--text-muted, inherit); opacity: 0.8; }
 .purchase-lines input[data-field="description"] { min-width: 220px; }
+
+/* ─── Suscripción ───────────────────────────────────────────────────────── */
+.subscription-banner { padding: 10px 16px; font-size: 0.92rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.subscription-banner svg { width: 18px; height: 18px; flex-shrink: 0; }
+.subscription-banner.is-warning { background: var(--warning-soft); color: var(--warning); }
+.subscription-banner.is-danger { background: var(--danger-soft); color: var(--danger); }
+.subscription-banner a { color: inherit; font-weight: 600; }
+.suspended-card { max-width: 720px; margin: 24px auto; display: grid; gap: 12px; }
+.suspended-card h1 { margin: 0; font-size: 1.5rem; text-align: center; }
+.suspended-card h2 { font-size: 1.05rem; display: flex; align-items: center; gap: 8px; margin: 8px 0 0; }
+.suspended-icon { width: 64px; height: 64px; border-radius: 50%; margin: 0 auto; display: grid; place-items: center; background: var(--danger-soft); color: var(--danger); }
+.suspended-icon svg { width: 30px; height: 30px; }
+.reassure { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: var(--radius-md); background: var(--success-soft); color: var(--text); margin: 0; }
+.reassure svg { color: var(--success); width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px; }
+.steps-list { display: grid; gap: 14px; padding-left: 22px; margin: 0; }
+.steps-list li { line-height: 1.5; }
+.steps-list .button { margin-top: 6px; }
+.payment-instructions { white-space: pre-line; margin-top: 6px; padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); font-family: inherit; }
+.plan-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 10px; }
+.plan-option { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface, transparent); color: var(--text); cursor: pointer; text-align: center; font: inherit; }
+.plan-option:hover, .plan-option:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+.platform-page { max-width: 1200px; }
+.platform-page .tabs { margin-bottom: 16px; }
+.platform-page h3 { display: flex; align-items: center; gap: 8px; margin: 18px 0 6px; }
+.platform-page h3:first-child { margin-top: 0; }
+
+/* ─── Centro de aprendizaje y recorridos ────────────────────────────────── */
+.help-layout { display: grid; grid-template-columns: 280px 1fr; gap: 16px; align-items: start; }
+.help-index { padding: 14px; display: grid; gap: 12px; position: sticky; top: 12px; }
+.help-progress { display: grid; gap: 6px; }
+.help-progress strong { display: flex; align-items: center; gap: 6px; }
+.progress-bar { height: 8px; border-radius: 99px; background: var(--surface-muted); overflow: hidden; }
+.progress-bar span { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.3s; }
+.help-topics { display: grid; gap: 2px; }
+.help-topic { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-sm); color: var(--text); text-decoration: none; }
+.help-topic:hover { background: var(--surface-muted); }
+.help-topic.is-active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.help-topic svg { width: 18px; height: 18px; flex-shrink: 0; }
+.help-done { margin-left: auto; color: var(--success); display: inline-flex; }
+.help-article { display: grid; gap: 16px; }
+.help-article-header { display: flex; gap: 14px; align-items: flex-start; }
+.help-article-header h2 { margin: 0 0 4px; }
+.help-article-header p { margin: 0; }
+.help-section h3 { display: flex; align-items: center; gap: 8px; font-size: 1rem; margin: 0 0 8px; }
+.help-section h3 svg { width: 18px; height: 18px; color: var(--accent); }
+.help-section ol, .help-section ul { margin: 0; padding-left: 22px; display: grid; gap: 8px; line-height: 1.55; }
+.help-consejos { padding: 12px 14px; border-radius: var(--radius-md); background: var(--accent-soft); }
+.help-practice { display: flex; gap: 8px; align-items: center; margin: 0; padding: 10px 12px; border-radius: var(--radius-md); background: var(--warning-soft); color: var(--warning); }
+@media (max-width: 860px) {
+  .help-layout { grid-template-columns: 1fr; }
+  .help-index { position: static; }
+}
+
+.tour-overlay { position: fixed; inset: 0; z-index: 9000; pointer-events: auto; }
+.tour-overlay.is-solid { background: rgba(15, 20, 25, 0.55); }
+.tour-spotlight { position: fixed; z-index: 9001; border-radius: 10px; box-shadow: 0 0 0 9999px rgba(15, 20, 25, 0.55); outline: 2px solid var(--accent); pointer-events: none; transition: top 0.2s, left 0.2s, width 0.2s, height 0.2s; }
+.tour-card { position: fixed; z-index: 9002; width: min(360px, calc(100vw - 24px)); padding: 16px; border-radius: var(--radius-lg); background: var(--surface, #fff); color: var(--text); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3); border: 1px solid var(--border); display: grid; gap: 8px; }
+.tour-card.is-centered { top: 50% !important; left: 50% !important; transform: translate(-50%, -50%); }
+.tour-card h3 { margin: 0; font-size: 1.05rem; }
+.tour-card p { margin: 0; line-height: 1.5; }
+.tour-header { display: flex; justify-content: space-between; align-items: center; }
+.tour-count { font-size: 0.8rem; color: var(--text-muted); }
+.tour-actions { display: flex; justify-content: space-between; margin-top: 4px; }
+.tour-progress { height: 4px; border-radius: 99px; background: var(--surface-muted); overflow: hidden; }
+.tour-progress span { display: block; height: 100%; background: var(--accent); }
+@media (max-width: 640px) {
+  .tour-card:not(.is-centered) { top: auto !important; bottom: 12px; left: 12px !important; right: 12px; width: auto; }
+}

@@ -16,6 +16,12 @@ export class ApiError extends Error {
 type QueryValue = string | number | boolean | null | undefined;
 
 let onUnauthorized: (() => void) | null = null;
+let onSuspended: (() => void) | null = null;
+
+/** Se llama cuando el servidor responde 402 (suscripción suspendida por falta de pago). */
+export function setSuspendedHandler(handler: (() => void) | null): void {
+  onSuspended = handler;
+}
 
 /** Se llama cuando la sesión expira (para volver a la pantalla de ingreso). */
 export function setUnauthorizedHandler(handler: () => void): void {
@@ -53,6 +59,7 @@ export async function apiRequest<TResponse>(
 
   if (!response.ok) {
     if (response.status === 401 && onUnauthorized && !path.endsWith('/login')) onUnauthorized();
+    if (response.status === 402 && onSuspended) onSuspended();
     const message = payload?.error?.message ?? `Error inesperado (${response.status}).`;
     throw new ApiError(message, response.status, payload?.error?.code ?? 'UNKNOWN');
   }

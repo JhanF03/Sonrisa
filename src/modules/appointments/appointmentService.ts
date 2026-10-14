@@ -19,6 +19,7 @@
  * y la limpieza programada la marca como cancelada después.
  */
 import type { SqlDatabase, SqlStatement, SqlValue } from '../../db/database.js';
+import { computeSubscription } from '../../shared/subscription.js';
 import { isSlotTakenError, occupiesSlot, SQL_NOW_UTC } from '../../db/sqlFragments.js';
 import type { Actor, TenantRow } from '../../http/context.js';
 import { AppError, conflict, notFound } from '../../http/errors.js';
@@ -432,7 +433,7 @@ export class AppointmentService {
     options: { onlinePaymentsEnabled: boolean },
     nowMs = Date.now(),
   ): Promise<AppointmentRow> {
-    if (tenant.online_booking_enabled !== 1) {
+    if (tenant.online_booking_enabled !== 1 || isTenantSuspended(tenant)) {
       throw new AppError('Este consultorio no tiene la reserva en línea activa.', 422, 'BOOKING_DISABLED');
     }
 
@@ -896,4 +897,12 @@ function assertInFuture(tenant: TenantRow, appointment: AppointmentRow): void {
   if (appointment.start_at <= nowLocal(tenant.utc_offset_minutes)) {
     throw new AppError('Esta cita ya pasó. Comunícate con el consultorio.', 422, 'APPOINTMENT_PAST');
   }
+}
+
+/** Suscripción suspendida por falta de pago: no se reciben reservas en línea nuevas. */
+export function isTenantSuspended(tenant: TenantRow): boolean {
+  return computeSubscription(
+    { isShowcase: tenant.is_showcase === 1, billingMode: tenant.billing_mode, paidUntil: tenant.paid_until, graceDays: tenant.grace_days },
+    todayLocal(tenant.utc_offset_minutes),
+  ).blocked;
 }

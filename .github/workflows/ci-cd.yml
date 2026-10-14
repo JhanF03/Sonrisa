@@ -1,0 +1,117 @@
+# CI/CD de Agenda Sonrisa (GitHub Actions)
+#
+# 1. calidad:   tipos, lint de seguridad, pruebas, compilación y auditoría de dependencias.
+# 2. e2e:       levanta el Worker con el runtime de Cloudflare + D1 local y ejecuta la prueba de humo.
+# 3. despliegue: solo en la rama main y si existen los secretos de Cloudflare.
+#
+# Secretos del repositorio necesarios para desplegar (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN   Token con permiso "Edit Cloudflare Workers" y "D1 Edit".
+#   CLOUDFLARE_ACCOUNT_ID  ID de tu cuenta de Cloudflare.
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  calidad:
+    name: Calidad y seguridad
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Verificación de tipos (Node, Worker y frontend)
+        run: npm run typecheck
+      - name: Lint con reglas de seguridad
+        run: npm run lint -- --max-warnings 0
+      - name: Pruebas (seguridad, negocio y frontend)
+        run: npm test
+      - name: Compilar frontend
+        run: npm run build
+      - name: Auditoría de dependencias de producción
+        run: npm audit --omit=dev --audit-level=high
+      - name: Validar paquete de Cloudflare (sin desplegar)
+        run: npm run cf:verify
+
+  e2e:
+    name: Prueba de extremo a extremo (runtime Cloudflare + D1)
+    runs-on: ubuntu-latest
+    needs: calidad
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Secretos temporales para la prueba
+        run: |
+          {
+            echo "APP_SECRET=$(openssl rand -hex 32)"
+            echo "PLATFORM_ADMIN_KEY=ci-$(openssl rand -hex 24)"
+            echo "ENVIRONMENT=development"
+          } > .dev.vars
+      - name: Migrar D1 local
+        run: npx wrangler d1 migrations apply agenda-sonrisa --local
+      - name: Levantar Worker y ejecutar prueba de humo
+        run: |
+          npx wrangler dev --port 8787 --ip 127.0.0.1 > wrangler.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            curl -sf http://127.0.0.1:8787/api/health > /dev/null && break
+            sleep 2
+          done
+          PLATFORM_KEY=$(grep PLATFORM_ADMIN_KEY .dev.vars | cut -d= -f2)
+          node scripts/smoke-test.mjs http://127.0.0.1:8787 "$PLATFORM_KEY"
+      - name: Registro del Worker (si falla)
+        if: failure()
+        run: cat wrangler.log
+
+  despliegue:
+    name: Desplegar en Cloudflare
+    runs-on: ubuntu-latest
+    needs: [calidad, e2e]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    timeout-minutes: 10
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Verificar que existan los secretos
+        id: secrets
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "Sin secretos de Cloudflare: se omite el despliegue."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.secrets.outputs.enabled == 'true'
+        run: npm ci
+      - name: Aplicar migraciones a D1 (producción)
+        if: steps.secrets.outputs.enabled == 'true'
+        run: npm run cf:migrate:remote
+      - name: Desplegar Worker y frontend
+        if: steps.secrets.outputs.enabled == 'true'
+        run: npm run cf:deploy

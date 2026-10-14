@@ -8,7 +8,7 @@ Fecha: 12 de octubre de 2026 · Alcance: backend (Hono), frontend, base de datos
 |---|---|---|
 | Tipos estrictos (Node, Worker y frontend) | `tsc --strict` | ✅ Sin errores |
 | Lint de calidad y seguridad | ESLint + typescript-eslint + eslint-plugin-security | ✅ 0 errores, 0 advertencias |
-| Pruebas automáticas | `node:test` (134 pruebas) | ✅ 134/134 |
+| Pruebas automáticas | `node:test` (149 pruebas) | ✅ 149/149 |
 | Dependencias con vulnerabilidades conocidas | `npm audit` | ✅ 0 (producción y desarrollo) |
 | Esquema en el motor real de Cloudflare | `wrangler d1 migrations apply --local` | ✅ 37 sentencias aplicadas |
 | Recorrido de extremo a extremo en runtime Cloudflare + D1 | `scripts/smoke-test.mjs` | ✅ 21/21 verificaciones |

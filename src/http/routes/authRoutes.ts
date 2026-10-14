@@ -4,6 +4,8 @@
 import type { Hono } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
+import { computeSubscription } from '../../shared/subscription.js';
+import { todayLocal } from '../../utils/time.js';
 import { PERMISSION_CATALOG } from '../../security/permissions.js';
 import { actorOf, requireAuth, type AppEnv } from '../context.js';
 import { getSessionCookieName } from '../middleware.js';
@@ -60,6 +62,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
       method: 'GET',
       path: '/api/auth/me',
       access: authenticatedAccess,
+      allowWhenSuspended: true,
       handler: (context) => {
         const auth = requireAuth(context);
         return context.json({
@@ -73,6 +76,13 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
             logoUrl: auth.tenant.logo_url,
             isShowcase: auth.tenant.is_showcase === 1,
             utcOffsetMinutes: auth.tenant.utc_offset_minutes,
+          },
+          subscription: {
+            ...computeSubscription(
+              { isShowcase: auth.tenant.is_showcase === 1, billingMode: auth.tenant.billing_mode, paidUntil: auth.tenant.paid_until, graceDays: auth.tenant.grace_days },
+              todayLocal(auth.tenant.utc_offset_minutes),
+            ),
+            monthlyPrice: auth.tenant.monthly_price,
           },
         });
       },
@@ -89,6 +99,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     {
       method: 'POST',
       path: '/api/auth/change-password',
+      allowWhenSuspended: true,
       access: authenticatedAccess,
       handler: async (context) => {
         const input = await readJsonBody(

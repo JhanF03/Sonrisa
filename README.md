@@ -23,11 +23,13 @@ Diseñado para funcionar **a costo cero** en el plan gratuito de Cloudflare, y p
 | 📦 **Inventario** | Insumos con existencia calculada por movimientos (no se descuadra), costo promedio ponderado, mínimo y alerta "Pedir", ajustes (conteo, vencidos, inventario inicial), kardex, Excel. |
 | 🧮 **Costo por servicio** | Receta de insumos por servicio, costo y margen. Al marcar la cita **atendida** se descuentan los insumos automáticamente (una sola vez). |
 | 📈 **Indicadores** | Inasistencia, confirmación, ingresos de citas con recordatorio, recaudo, cartera, reservas en línea. |
-| 🛡️ **Permisos granulares** | 39 permisos `módulo.recurso.acción`, roles editables, alcance "solo su agenda", protección contra escalamiento de privilegios, auditoría. |
+| 🛡️ **Permisos granulares** | 40 permisos `módulo.recurso.acción`, roles editables, alcance "solo su agenda", protección contra escalamiento de privilegios, auditoría. |
 | 🛡️ **Anti-reservas fantasma** | Verificación por WhatsApp con código de 6 dígitos, límite de reservas activas por documento y celular (atómico), liberación automática si no confirma, Turnstile opcional. *Configuración → Reservas en línea*. |
 | 💳 **Pago anticipado (Wompi)** | Cada consultorio conecta su cuenta Wompi (*Configuración → Pagos en línea*) y elige en *Servicios* qué servicios exigen anticipo (porcentaje o valor fijo). Checkout firmado, confirmación verificada por evento y por API, recibo automático, alertas de pagos tardíos o dobles. |
 | 💬 **WhatsApp** | Número del consultorio, plantilla editable con vista previa y prueba, detección de fijos. Sin costo (enlaces wa.me). |
-| ✨ **Modo vitrina** | En `/plataforma` creas en segundos una demo con el nombre, color y logo del prospecto, con datos de ejemplo. |
+| 🧭 **Panel del dueño** | En `/plataforma` (sesión segura de 8 h con tu clave): resumen de ingresos, consultorios reales y demos con su uso, registrar pagos, cambiar plan y fechas, suspender o dar cortesía, restablecer la clave del administrador, auditoría y creación de demos en segundos. |
+| 💰 **Suscripciones** | Cada consultorio real tiene "pagado hasta", valor mensual y días de gracia. Aviso 5 días antes, aviso en rojo durante la gracia y **suspensión automática** al terminar (el panel muestra el paso a paso para pagar; las reservas en línea se pausan; no se borra nada). Al registrar el pago —manual o **en línea con tu Wompi**— el acceso vuelve al instante. |
+| 🎓 **Centro de aprendizaje** | Menú *Aprende a usarlo*: guía paso a paso de cada módulo, buscador, avance del usuario y **recorridos guiados** sobre la pantalla real. Botón (?) en cada vista y bienvenida en el primer ingreso. |
 | 🌗 **Interfaz** | Modo día/noche, colores sobrios, íconos con explicación, instalable en el celular (PWA). |
 
 ---
@@ -87,7 +89,7 @@ npx wrangler d1 export agenda-sonrisa --remote --output respaldo-$(date +%F).sql
 
 El flujo `.github/workflows/ci-cd.yml` se ejecuta en cada cambio:
 
-1. **Calidad:** tipos, lint de seguridad (0 advertencias), 134 pruebas, compilación, auditoría de dependencias y validación del paquete de Cloudflare.
+1. **Calidad:** tipos, lint de seguridad (0 advertencias), 149 pruebas, compilación, auditoría de dependencias y validación del paquete de Cloudflare.
 2. **E2E:** levanta el Worker con el runtime real de Cloudflare + D1 local y ejecuta la prueba de humo (21 verificaciones).
 3. **Despliegue:** solo en `main`, si configuraste los secretos `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`. Aplica migraciones y publica.
 
@@ -159,6 +161,13 @@ scripts/                         # Compilación, desarrollo y prueba de humo
 Los permisos están en `src/security/permissions.ts`. Roles iniciales: **Administrador** (todo, no editable), **Recepción**, **Odontólogo** (solo su agenda) y **Auxiliar contable**. Crea los que necesites desde *Usuarios y roles*.
 
 ---
+
+## 💰 Cobrar la suscripción a tus clientes
+
+1. Entra a `/plataforma` con tu `PLATFORM_ADMIN_KEY` → **Configuración**: tu nombre, tu WhatsApp, las instrucciones de pago (Nequi, cuenta bancaria) y los valores por defecto (precio, días de prueba y de gracia).
+2. Opcional — pago en línea con **tu** Wompi: llaves del ambiente elegido y, en Wompi → Desarrolladores, la URL de eventos que muestra la pantalla (`/api/webhooks/wompi-plataforma`). Así tus clientes pagan desde su panel y se reactivan solos.
+3. Al crear un consultorio real defines el valor mensual y hasta qué fecha tiene acceso (prueba).
+4. Cuando te paguen por transferencia: **Consultorios → Pago**. El acceso se reactiva de inmediato.
 
 ## 💳 Activar pagos con Wompi (por consultorio)
 
