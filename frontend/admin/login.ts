@@ -1,6 +1,7 @@
 /**
  * Pantalla de ingreso al panel.
  */
+import { logoTooth } from '../core/brand.js';
 import { api } from '../core/api.js';
 import { $, html, readForm, setContent } from '../core/dom.js';
 import { icon, refreshIcons, themeToggleButton } from '../core/ui.js';
@@ -12,7 +13,7 @@ export function renderLogin(root: HTMLElement, onSuccess: () => void): void {
       <div class="card auth-card">
         <div class="button-row" style="justify-content: space-between">
           <div class="brand">
-            <span class="brand-mark">${icon('smile')}</span>
+            <span class="brand-mark">${logoTooth()}</span>
             <div><div class="brand-name">Agenda Sonrisa</div><div class="brand-product">Gestión para consultorios</div></div>
           </div>
           ${themeToggleButton()}

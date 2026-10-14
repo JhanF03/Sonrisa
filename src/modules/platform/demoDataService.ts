@@ -4,7 +4,13 @@
  * Los precios son ilustrativos; cada consultorio define los suyos.
  */
 import type { SqlDatabase, SqlStatement } from '../../db/database.js';
-import { addDays, addMinutes, isoNow, localToUtcIso, todayLocal, weekdayOf } from '../../utils/time.js';
+import { addDays, addMinutes, isoNow, localToUtcIso, nowLocal, todayLocal, weekdayOf } from '../../utils/time.js';
+
+/** Horas de un día con agenda llena: [hora, profesional]. Separadas para no cruzarse (servicios de hasta 60 min). */
+const BUSY_DAY_TIMES: Array<[string, number]> = [
+  ['08:00', 0], ['08:30', 1], ['09:15', 0], ['10:00', 1], ['10:30', 0], ['11:00', 1],
+  ['14:00', 0], ['14:30', 1], ['15:15', 0], ['16:00', 1], ['16:30', 0],
+];
 
 const DEMO_SERVICES = [
   { code: 'VAL', name: 'Valoración inicial', category: 'General', price: 50_000, duration: 30 },
@@ -93,13 +99,17 @@ export async function seedDemoData(db: SqlDatabase, tenantId: string, utcOffsetM
     const weekday = weekdayOf(date);
     if (weekday === 0) continue;
 
-    const dailyTimes = dayOffset === 0 ? ['09:00', '10:30', '15:00'] : weekday === 6 ? ['09:00'] : ['08:30', '14:30'];
-    for (const [timeIndex, time] of dailyTimes.entries()) {
-      const professional = professionals[(dayOffset + timeIndex + 100) % 2];
+    // Hoy y los dos días siguientes, agenda llena (así se ve un día real de consultorio).
+    const isBusyDay = dayOffset >= 0 && dayOffset <= 2 && weekday !== 6;
+    const dailyTimes: Array<[string, number]> = isBusyDay
+      ? BUSY_DAY_TIMES
+      : weekday === 6 ? [['09:00', dayOffset % 2]] : [['08:30', dayOffset % 2], ['14:30', (dayOffset + 1) % 2]];
+    for (const [timeIndex, [time, professionalIndex]] of dailyTimes.entries()) {
+      const professional = professionals[Math.abs(professionalIndex) % 2];
       const service = services[(dayOffset + timeIndex + 100) % 5];
       const patient = patients[patientCursor++ % patients.length];
       const startAt = `${date}T${time}`;
-      const isPast = dayOffset < 0;
+      const isPast = startAt < nowLocal(utcOffsetMinutes);
       const status = isPast ? (patientCursor % 9 === 0 ? 'no_asistio' : 'atendida') : patientCursor % 3 === 0 ? 'confirmada' : 'pendiente';
       const appointmentId = crypto.randomUUID();
       const createdAt = localToUtcIso(`${addDays(date, -3)}T10:00`, utcOffsetMinutes);

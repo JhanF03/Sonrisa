@@ -153,6 +153,14 @@ Atajos: `/registro?accion=demo` abre la demo · `/registro?plan=profesional` pre
 
 ---
 
+## 🎨 Diseño
+
+- **Paleta "odontograma":** esmalte, papel, grafito, tinta azul (acciones) y tinta roja (alertas), como se marca la ficha dental. Modo día y noche.
+- **Tipografías propias** (Funnel Display y Funnel Sans) servidas desde `public/fonts`: sin Google Fonts ni otras peticiones externas.
+- **Íconos en línea** (Phosphor, duotono, MIT). Para agregar uno: súmalo a la lista de `scripts/build-icons.mjs` y ejecuta `node scripts/build-icons.mjs`.
+- **Imágenes de `/registro`:** capturas reales del sistema con datos de la demo, en `public/img` (WebP).
+- Cada consultorio puede usar su propio color de marca; los que tenían el verde anterior pasan a la paleta nueva.
+
 ## 🏗️ Arquitectura
 
 ```

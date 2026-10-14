@@ -3,13 +3,14 @@
  * maestra), iniciar sesión con correo + contraseña (+ código de 6 dígitos si
  * activó la verificación en dos pasos) y recuperar el acceso.
  */
+import { logoTooth } from '../../core/brand.js';
 import { api, ApiError } from '../../core/api.js';
 import { $, html, readForm, setContent, type SafeHtml } from '../../core/dom.js';
 import { icon, refreshIcons, themeToggleButton } from '../../core/ui.js';
 
 const authLayout = (title: string, body: SafeHtml) => html`<main class="public-page platform-auth">
   <header class="public-header">
-    <div class="brand"><span class="brand-mark">${icon('layout-dashboard')}</span><div><div class="brand-name">Panel del dueño</div><div class="brand-product">Agenda Sonrisa · Plataforma</div></div></div>
+    <div class="brand"><span class="brand-mark">${logoTooth()}</span><div><div class="brand-name">Panel del dueño</div><div class="brand-product">Agenda Sonrisa · Plataforma</div></div></div>
     ${themeToggleButton()}
   </header>
   <section class="card card-padded auth-card">

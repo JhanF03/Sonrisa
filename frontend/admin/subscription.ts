@@ -6,6 +6,7 @@
  *  • Página de regreso desde Wompi que verifica el pago y reactiva.
  */
 import { api } from '../core/api.js';
+import { logoTooth } from '../core/brand.js';
 import { html, safeUrl, setContent, type SafeHtml } from '../core/dom.js';
 import { addDays, formatLongDate, formatMoney, formatShortDate, formatUtcAsLocal } from '../core/format.js';
 import { planCard, priceSummary } from '../core/planCards.js';
@@ -116,7 +117,7 @@ export async function renderSuspendedScreen(root: HTMLElement, onRetry: () => Pr
     setContent(
       root,
       html`<main class="public-page suspended-page">
-        <header class="public-header"><div class="brand"><span class="brand-mark">${icon('sparkles')}</span><div><div class="brand-name">${current.clinic.name}</div><div class="brand-product">Agenda Sonrisa · Demo</div></div></div>${themeToggleButton()}</header>
+        <header class="public-header"><div class="brand"><span class="brand-mark">${logoTooth()}</span><div><div class="brand-name">${current.clinic.name}</div><div class="brand-product">Agenda Sonrisa · Demo</div></div></div>${themeToggleButton()}</header>
         <section class="card card-padded suspended-card">
           <div class="suspended-icon">${icon('hourglass')}</div>
           <h1>Tu demo terminó</h1>
@@ -146,7 +147,7 @@ export async function renderSuspendedScreen(root: HTMLElement, onRetry: () => Pr
     root,
     html`<main class="public-page suspended-page">
       <header class="public-header">
-        <div class="brand"><span class="brand-mark">${icon('lock')}</span><div><div class="brand-name">${current.clinic.name}</div><div class="brand-product">Agenda Sonrisa</div></div></div>
+        <div class="brand"><span class="brand-mark">${logoTooth()}</span><div><div class="brand-name">${current.clinic.name}</div><div class="brand-product">Agenda Sonrisa</div></div></div>
         ${themeToggleButton()}
       </header>
       <section class="card card-padded suspended-card">

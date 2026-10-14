@@ -30,7 +30,7 @@ const clinicBaseSchema = z.object({
   clinicName: requiredText(120, 'El nombre del consultorio'),
   city: optionalText(80),
   phone: optionalText(30),
-  brandColor: hexColorSchema.default('#3f6f68'),
+  brandColor: hexColorSchema.default('#2742a8'),
   logoUrl: httpsUrlSchema.nullable().optional().transform((value) => value ?? null),
 });
 

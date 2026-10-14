@@ -6,6 +6,7 @@
  * Rutas (hash): #/resumen · #/consultorios · #/demos · #/crear · #/planes ·
  * #/configuracion · #/auditoria · #/cuenta · #/recuperar
  */
+import { logoTooth } from '../core/brand.js';
 import { api, ApiError } from '../core/api.js';
 import { $, html, setContent } from '../core/dom.js';
 import { icon, loadingState, refreshIcons, themeToggleButton } from '../core/ui.js';
@@ -59,7 +60,7 @@ async function renderPanel(admin: PlatformAdmin): Promise<void> {
     root,
     html`<main class="public-page platform-page">
       <header class="public-header">
-        <div class="brand"><span class="brand-mark">${icon('layout-dashboard')}</span><div><div class="brand-name">Panel del dueño</div><div class="brand-product">${admin.fullName}</div></div></div>
+        <div class="brand"><span class="brand-mark">${logoTooth()}</span><div><div class="brand-name">Panel del dueño</div><div class="brand-product">${admin.fullName}</div></div></div>
         <div class="button-row">${themeToggleButton()}<button class="button button-ghost button-small" data-action="logout">${icon('log-out')} Salir</button></div>
       </header>
       ${admin.twoFactorEnabled ? '' : html`<a class="platform-notice" href="#/cuenta">${icon('shield-check')} Protege tu cuenta: activa la verificación en dos pasos.</a>`}

@@ -2,6 +2,7 @@
  * Estructura del panel: menú lateral filtrado por permisos, barra superior y
  * enrutador por hash (#/agenda, #/pacientes/123…).
  */
+import { logoTooth } from '../core/brand.js';
 import { api, setSuspendedHandler, setUnauthorizedHandler } from '../core/api.js';
 import { $, html, raw, readForm, safeUrl, setContent, type SafeHtml } from '../core/dom.js';
 import { applyBrandColor, icon, openFormModal, refreshIcons, themeToggleButton, toast } from '../core/ui.js';
@@ -145,7 +146,7 @@ function renderShell(): void {
       <div class="shell" id="shell">
         <aside class="sidebar" aria-label="Menú principal">
           <div class="brand">
-            <span class="brand-mark">${clinic.logoUrl ? html`<img src="${safeUrl(clinic.logoUrl, ['https:'])}" alt="" referrerpolicy="no-referrer" />` : icon('smile')}</span>
+            <span class="brand-mark">${clinic.logoUrl ? html`<img src="${safeUrl(clinic.logoUrl, ['https:'])}" alt="" referrerpolicy="no-referrer" />` : logoTooth()}</span>
             <div><div class="brand-name">${clinic.name}</div><div class="brand-product">Agenda Sonrisa</div></div>
           </div>
           <nav>${navMarkup}</nav>

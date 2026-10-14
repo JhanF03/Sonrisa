@@ -2,41 +2,24 @@
  * Componentes de interfaz reutilizables: íconos, tema día/noche,
  * notificaciones, ventanas modales y confirmaciones.
  */
-import {
-  Activity, Ban, Bell, BellRing, Building2, Calendar, CalendarClock, CalendarDays, CalendarPlus, CalendarX, ChartColumn,
-  Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, CircleCheckBig, CircleDollarSign, CircleHelp, ClipboardList,
-  Clock, Coins, Copy, createIcons, CreditCard, Download, ExternalLink, Eye, FileSpreadsheet, Filter, HandCoins, Hourglass, Info,
-  KeyRound, Link, ListChecks, Lock, LogOut, MapPin, Menu, MessageCircle, Moon, Palette, Pencil, Phone, Plus, Printer,
-  Receipt, RefreshCw, Repeat, ScrollText, Search, Settings, ShieldCheck, Smile, Sparkles, Stethoscope, Store, Sun, Trash2,
-  TrendingUp, TriangleAlert, Undo2, User, UserCheck, UserPlus, Users, UserX, Wallet, X,
-  MessageSquareText, Send, Webhook, PlugZap, Shield,
-  Package, Truck, FileUp, Boxes, ArrowDownUp, Calculator, Scale, FileText,
-  ArrowRight, CircleX, LogIn, GraduationCap, LifeBuoy, BookOpen, CirclePlay, BadgeCheck, LayoutDashboard, Ellipsis, Mouse, Smartphone,
-  Gift, Rocket, Crown, Minus,
-} from 'lucide';
-import { $, html, safeUrl, setContent, type SafeHtml } from './dom.js';
+import { $, html, raw, safeUrl, setContent, type SafeHtml } from './dom.js';
 import { whatsappLink } from './format.js';
+import { ICON_SET } from './iconSet.js';
 
-const ICONS = {
-  Activity, Ban, Bell, BellRing, Building2, Calendar, CalendarClock, CalendarDays, CalendarPlus, CalendarX, ChartColumn,
-  Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, CircleCheckBig, CircleDollarSign, CircleHelp, ClipboardList,
-  Clock, Coins, Copy, CreditCard, Download, ExternalLink, Eye, FileSpreadsheet, Filter, HandCoins, Hourglass, Info, KeyRound, Link,
-  ListChecks, Lock, LogOut, MapPin, Menu, MessageCircle, Moon, Palette, Pencil, Phone, Plus, Printer, Receipt, RefreshCw,
-  Repeat, ScrollText, Search, Settings, ShieldCheck, Smile, Sparkles, Stethoscope, Store, Sun, Trash2, TrendingUp,
-  TriangleAlert, Undo2, User, UserCheck, UserPlus, Users, UserX, Wallet, X,
-  MessageSquareText, Send, Webhook, PlugZap, Shield,
-  Package, Truck, FileUp, Boxes, ArrowDownUp, Calculator, Scale, FileText,
-  ArrowRight, CircleX, LogIn, GraduationCap, LifeBuoy, BookOpen, CirclePlay, BadgeCheck, LayoutDashboard, Ellipsis, Mouse, Smartphone,
-  Gift, Rocket, Crown, Minus,
+/**
+ * Íconos SVG en línea (Phosphor, estilo duotono): no se descargan aparte ni
+ * hay que "procesarlos" después de pintar. Se agregan en scripts/build-icons.mjs.
+ */
+export const icon = (name: string): SafeHtml => {
+  const inner = ICON_SET[name];
+  if (!inner) return html``;
+  return raw(`<svg class="icon" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" focusable="false">${inner}</svg>`);
 };
 
-/** Reemplaza los <i data-lucide="nombre"> por sus SVG. */
-export function refreshIcons(root?: Element): void {
-  createIcons({ icons: ICONS, attrs: { 'stroke-width': '1.75', 'aria-hidden': 'true' }, root });
+/** Se conserva por compatibilidad: los íconos ya llegan dibujados. */
+export function refreshIcons(_root?: Element): void {
+  /* nada que hacer */
 }
-
-/** Ícono inline para usar dentro de plantillas `html`. */
-export const icon = (name: string) => html`<i data-lucide="${name}"></i>`;
 
 // ─── Tema día / noche ───────────────────────────────────────────────────────
 
@@ -64,7 +47,8 @@ document.addEventListener('click', (event) => {
 
 /** Aplica el color de marca del consultorio a la interfaz. */
 export function applyBrandColor(hexColor: string | null | undefined): void {
-  if (hexColor && /^#[0-9a-fA-F]{6}$/.test(hexColor)) {
+  // #3f6f68 era el color por defecto anterior: esos consultorios toman la paleta nueva.
+  if (hexColor && /^#[0-9a-fA-F]{6}$/.test(hexColor) && hexColor.toLowerCase() !== '#3f6f68') {
     document.documentElement.style.setProperty('--brand', hexColor);
   }
 }

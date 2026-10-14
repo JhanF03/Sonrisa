@@ -23,7 +23,7 @@ export async function renderCreateView(content: HTMLElement): Promise<void> {
           <label class="field full"><span>Nombre del consultorio</span><input name="clinicName" required maxlength="120" placeholder="Clínica Dental Sonrisas del Norte" /></label>
           <label class="field"><span>Ciudad</span><input name="city" maxlength="80" /></label>
           <label class="field"><span>Teléfono</span><input name="phone" maxlength="30" /></label>
-          <label class="field"><span>${icon('palette')} Color</span><input name="brandColor" type="color" value="#3f6f68" /></label>
+          <label class="field"><span>${icon('palette')} Color</span><input name="brandColor" type="color" value="#2742a8" /></label>
           <label class="field"><span>Logo (URL https)</span><input name="logoUrl" type="url" placeholder="https://…" /></label>
         </div>
         <div class="form-grid" data-demo-fields>

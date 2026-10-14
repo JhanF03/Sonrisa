@@ -2,6 +2,7 @@
  * Página pública de reservas del consultorio (/c/:slug).
  * Flujo en 4 pasos: servicio → profesional → día y hora → datos.
  */
+import { logoTooth } from '../core/brand.js';
 import { api, ApiError } from '../core/api.js';
 import { $, html, readForm, safeUrl, setContent, type SafeHtml } from '../core/dom.js';
 import { addDays, DOCUMENT_TYPES, formatLongDate, formatMoney, formatShortDate, formatTime, todayLocal } from '../core/format.js';
@@ -161,7 +162,7 @@ export function publicLayout(clinic: Pick<PublicClinic, 'name' | 'logoUrl' | 'ph
   <main class="public-page">
     <header class="public-header">
       <div class="brand">
-        <span class="brand-mark">${clinic.logoUrl ? html`<img src="${safeUrl(clinic.logoUrl, ['https:'])}" alt="" referrerpolicy="no-referrer" />` : icon('smile')}</span>
+        <span class="brand-mark">${clinic.logoUrl ? html`<img src="${safeUrl(clinic.logoUrl, ['https:'])}" alt="" referrerpolicy="no-referrer" />` : logoTooth()}</span>
         <div><div class="brand-name">${clinic.name}</div><div class="brand-product">Reserva tu cita en línea</div></div>
       </div>
       ${themeToggleButton()}

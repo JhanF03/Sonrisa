@@ -49,3 +49,26 @@ describe('Frontend: formatos colombianos', () => {
     assert.equal(whatsappNumber('+57 300 123 4567'), '573001234567');
   });
 });
+
+describe('Íconos', () => {
+  it('cada ícono que pide la interfaz existe en el set generado', async () => {
+    const { readdirSync, readFileSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { ICON_SET } = await import('../frontend/core/iconSet.js');
+    const missing: string[] = [];
+    const walk = (directory: string) => {
+      for (const entry of readdirSync(directory)) {
+        const file = join(directory, entry);
+        if (statSync(file).isDirectory()) walk(file);
+        else if (file.endsWith('.ts') && !file.endsWith('iconSet.ts')) {
+          const source = readFileSync(file, 'utf8');
+          for (const match of source.matchAll(/(?:icon\(|iconName: ?|icon: |emptyState\(|kpi\()'([a-z0-9-]+)'/g)) {
+            if (!ICON_SET[match[1] as string]) missing.push(`${match[1]} (${file})`);
+          }
+        }
+      }
+    };
+    walk('frontend');
+    assert.deepEqual(missing, []);
+  });
+});

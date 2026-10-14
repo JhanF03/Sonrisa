@@ -155,7 +155,7 @@ export class TenantService {
         )
         .bind(
           tenantId, slug, tenantInput.name, tenantInput.city ?? null, tenantInput.phone ?? null,
-          tenantInput.brandColor ?? '#3f6f68', tenantInput.logoUrl ?? null, tenantInput.isShowcase ? 1 : 0,
+          tenantInput.brandColor ?? '#2742a8', tenantInput.logoUrl ?? null, tenantInput.isShowcase ? 1 : 0,
           tenantInput.isShowcase ? null : (tenantInput.paidUntil ?? addDays(todayLocal(-300), DEFAULT_INITIAL_DAYS)),
           tenantInput.monthlyPrice ?? 0, tenantInput.graceDays ?? 3, tenantInput.billingMode ?? 'auto', now,
         ),

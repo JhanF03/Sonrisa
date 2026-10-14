@@ -10,7 +10,7 @@ export interface ExcelColumn<TRow> {
   isMoney?: boolean;
 }
 
-const HEADER_STYLE = { fontWeight: 'bold', backgroundColor: '#3f6f68', color: '#ffffff' } as const;
+const HEADER_STYLE = { fontWeight: 'bold', backgroundColor: '#2742a8', color: '#ffffff' } as const;
 
 export async function downloadExcel<TRow>(fileName: string, sheetName: string, rows: TRow[], columns: ExcelColumn<TRow>[]): Promise<void> {
   const headerRow = columns.map((column) => ({ value: column.header, ...HEADER_STYLE }));
