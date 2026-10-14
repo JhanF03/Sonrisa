@@ -8,8 +8,7 @@
  */
 import type { Hono, MiddlewareHandler } from 'hono';
 import { AppError, forbidden, unauthorized } from './errors.js';
-import { computeSubscription } from '../shared/subscription.js';
-import { todayLocal } from '../utils/time.js';
+import { subscriptionOfTenant } from '../shared/subscription.js';
 import type { AppContext, AppEnv } from './context.js';
 import type { Permission } from '../security/permissions.js';
 
@@ -68,13 +67,13 @@ function accessGuard(access: RouteAccess, allowWhenSuspended: boolean): Middlewa
     if (!auth) throw unauthorized();
 
     if (!allowWhenSuspended) {
-      const tenant = auth.tenant;
-      const subscription = computeSubscription(
-        { isShowcase: tenant.is_showcase === 1, billingMode: tenant.billing_mode, paidUntil: tenant.paid_until, graceDays: tenant.grace_days },
-        todayLocal(tenant.utc_offset_minutes),
-      );
+      const subscription = subscriptionOfTenant(auth.tenant);
       if (subscription.blocked) {
-        throw new AppError('El acceso está suspendido por falta de pago de la suscripción.', 402, SUBSCRIPTION_SUSPENDED);
+        throw new AppError(
+          subscription.state === 'demo_vencida' ? 'Esta demo ya terminó.' : 'El acceso está suspendido por falta de pago de la suscripción.',
+          402,
+          SUBSCRIPTION_SUSPENDED,
+        );
       }
     }
 

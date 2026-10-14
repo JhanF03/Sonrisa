@@ -19,6 +19,7 @@ import { verifyPassword } from '../../security/crypto.js';
 import { isPermission, PERMISSION_CATALOG, type Permission } from '../../security/permissions.js';
 import { isoNow } from '../../utils/time.js';
 import type { AuditService } from '../audit/auditService.js';
+import type { PlanService } from '../plans/planService.js';
 
 export interface RoleView {
   id: string;
@@ -51,6 +52,7 @@ export class UserService {
     private readonly db: SqlDatabase,
     private readonly audit: AuditService,
     private readonly auth: AuthService,
+    private readonly seats?: Pick<PlanService, 'assertSeatAvailable'>,
   ) {}
 
   // ─── Roles ────────────────────────────────────────────────────────────────
@@ -185,6 +187,7 @@ export class UserService {
     const normalizedEmail = input.email.trim().toLowerCase();
     const existing = await this.db.prepare('SELECT 1 FROM users WHERE email = ?').bind(normalizedEmail).first();
     if (existing) throw conflict('Ya existe un usuario con ese correo.');
+    await this.seats?.assertSeatAvailable(actor.tenantId, 'usuario');
 
     const userId = crypto.randomUUID();
     const passwordHash = await this.auth.hashNewPassword(input.password);
@@ -212,6 +215,7 @@ export class UserService {
     await this.assertCanAssignRoles(actor.tenantId, actorPermissions, addedRoleIds);
     await this.assertRolesBelongToTenant(actor.tenantId, input.roleIds);
     await this.assertAdministratorRemains(actor.tenantId, userId, input);
+    if (input.isActive && !user.isActive) await this.seats?.assertSeatAvailable(actor.tenantId, 'usuario');
 
     await this.db.batch([
       this.db

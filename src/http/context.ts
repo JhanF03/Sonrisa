@@ -55,6 +55,23 @@ export interface TenantRow {
   monthly_price: number;
   grace_days: number;
   billing_mode: 'auto' | 'exento' | 'suspendido';
+  // Plan (migración 0008). enabled_modules y max_* se recalculan al cambiar de plan.
+  plan_id: string;
+  addon_modules: string;
+  extra_professionals: number;
+  extra_users: number;
+  custom_price: number | null;
+  enabled_modules: string;
+  max_professionals: number;
+  max_users: number;
+  pending_plan: string | null;
+  on_trial: number;
+  signup_source: 'dueno' | 'registro' | 'autoservicio';
+  demo_expires_at: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  converted_tenant_id: string | null;
 }
 
 /** Quién está haciendo la petición (usuario autenticado). */
@@ -64,6 +81,8 @@ export interface AuthContext {
   fullName: string;
   tenant: TenantRow;
   permissions: ReadonlySet<Permission>;
+  /** Permisos que el rol tiene pero el plan no incluye (para ofrecer mejorar el plan). */
+  lockedPermissions: ReadonlySet<Permission>;
   /** Profesional vinculado al usuario (para "ver solo su propia agenda"). */
   professionalId: string | null;
 }

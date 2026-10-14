@@ -126,7 +126,30 @@ Ponlo detrás de Nginx con HTTPS y define `TRUST_PROXY=true`. Respaldo: copia el
 6. **Caja:** registra pagos; el sistema abona a lo más antiguo y deja el excedente como anticipo.
 
 ### Para vender (modo vitrina)
-Antes de visitar un consultorio, entra a `/plataforma`, escribe su nombre y color, y obtén una demo con su marca. En la reunión muéstrale la reserva desde su celular y el panel desde el tuyo.
+Antes de visitar un consultorio, entra a `/plataforma`, escribe su nombre y color, y obtén una demo con su marca. En la reunión muéstrale la reserva desde su celular y el panel desde el tuyo (botón **Abrir panel** en Demos).
+
+### Venta autogestionada (`/registro`)
+Comparte `https://tu-dominio/registro` en tu web, redes o WhatsApp. Ahí el interesado:
+1. Ve los **planes y precios** (mensual o anual con meses gratis).
+2. Crea una **demo con datos de ejemplo** que dura 5 días (configurable). Cada día se le recuerda cuánto le queda y se le invita a crear su consultorio. Al vencer, la demo y sus datos se **borran solos** (también puedes borrarla o extenderla en **Demos**).
+3. Crea su **consultorio real con prueba gratis**. Si lo hace desde la demo, la demo sigue abierta **24 horas** más.
+4. Antes de terminar la prueba, paga desde **Mi plan** con tu Wompi. Sin intervención tuya.
+
+Atajos: `/registro?accion=demo` abre la demo · `/registro?plan=profesional` preselecciona un plan.
+
+### Planes y módulos
+| Plan | Incluye | Profesionales / usuarios (ejemplo) |
+|---|---|---|
+| Básico | Agenda, pacientes, reservas en línea, recordatorios, servicios, usuarios | 1 / 2 |
+| Profesional | Básico + Caja, cartera, indicadores, anticipos en línea | 3 / 6 |
+| Completo | Profesional + Compras e inventario, facturación electrónica, auditoría | 5 / 12 |
+
+- Precios, límites y módulos se editan en `/plataforma` → **Planes** (los valores iniciales son ejemplos).
+- Adicionales para cualquier plan: módulos sueltos, profesional extra y usuario extra.
+- Se cobra **por profesional con agenda** y con **límite de usuarios** por plan; al llegar al tope el sistema pide agregar adicionales o subir de plan.
+- El plan recorta los permisos: un módulo que no está en el plan aparece con candado en el menú y el servidor responde 403.
+- Cambio de plan desde **Mi plan**: en prueba o vencido → inmediato; subir estando al día → paga la diferencia de los días que quedan; bajar → se aplica al terminar lo ya pagado.
+- Los consultorios que ya existían quedan en Completo con su valor actual como **precio especial** (no cambia).
 
 ---
 
@@ -164,9 +187,9 @@ Los permisos están en `src/security/permissions.ts`. Roles iniciales: **Adminis
 
 ## 💰 Cobrar la suscripción a tus clientes
 
-1. Entra a `/plataforma`. La primera vez creas tu cuenta de dueño con la clave maestra `PLATFORM_ADMIN_KEY`; desde ahí ingresas con tu correo y contraseña (activa la verificación en dos pasos en **Mi cuenta**). Luego ve a **Configuración**: tu nombre, tu WhatsApp, las instrucciones de pago (Nequi, cuenta bancaria) y los valores por defecto (precio, días de prueba y de gracia).
+1. Entra a `/plataforma`. La primera vez creas tu cuenta de dueño con la clave maestra `PLATFORM_ADMIN_KEY`; desde ahí ingresas con tu correo y contraseña (activa la verificación en dos pasos en **Mi cuenta**). Luego ve a **Configuración**: tu nombre, tu WhatsApp, las instrucciones de pago (Nequi, cuenta bancaria), días de prueba y de gracia, y si el registro y las demos en línea están activos. Los precios están en **Planes**.
 2. Opcional — pago en línea con **tu** Wompi: llaves del ambiente elegido y, en Wompi → Desarrolladores, la URL de eventos que muestra la pantalla (`/api/webhooks/wompi-plataforma`). Así tus clientes pagan desde su panel y se reactivan solos.
-3. Al crear un consultorio real defines el valor mensual y hasta qué fecha tiene acceso (prueba).
+3. Al crear un consultorio real eliges su plan (o un precio especial) y hasta qué fecha tiene acceso (prueba). Los que se registran solos en `/registro` ya llegan con su plan y su prueba.
 4. Cuando te paguen por transferencia: **Consultorios → Pago**. El acceso se reactiva de inmediato.
 
 ## 💳 Activar pagos con Wompi (por consultorio)

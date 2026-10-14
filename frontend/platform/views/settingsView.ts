@@ -1,5 +1,5 @@
 /**
- * Configuración de cobro: datos del dueño, valores por defecto y Wompi propio.
+ * Configuración de cobro: datos del dueño, autogestión (registro y demos) y Wompi propio.
  */
 import { api } from '../../core/api.js';
 import { $, emptyToNull, html, readForm, setContent } from '../../core/dom.js';
@@ -19,11 +19,14 @@ export async function renderSettingsView(content: HTMLElement, reload: () => Pro
           <label class="field"><span>Tu WhatsApp (para comprobantes)</span><input name="ownerWhatsapp" maxlength="30" value="${settings.ownerWhatsapp}" placeholder="300 123 4567" /></label>
           <label class="field full"><span>Instrucciones de pago</span><textarea name="paymentInstructions" rows="4" maxlength="2000" placeholder="Nequi 300 123 4567 a nombre de …&#10;Bancolombia ahorros 123-456789-00">${settings.paymentInstructions}</textarea></label>
         </div>
-        <h3>${icon('settings')} Valores por defecto para consultorios nuevos</h3>
+        <h3>${icon('rocket')} Autogestión: registro y demos <span class="hint" data-tooltip="Los interesados entran a /registro, ven tus planes, crean una demo con datos o su consultorio con prueba gratis, y pagan con tu Wompi. Los precios se editan en la pestaña Planes.">${icon('info')}</span></h3>
         <div class="form-grid">
-          <label class="field"><span>Valor mensual (COP)</span><input name="defaultMonthlyPrice" type="number" min="0" step="1" value="${settings.defaultMonthlyPrice}" /></label>
-          <label class="field"><span>Días de prueba</span><input name="defaultTrialDays" type="number" min="0" max="365" value="${settings.defaultTrialDays}" /></label>
-          <label class="field"><span>Días de gracia</span><input name="defaultGraceDays" type="number" min="0" max="60" value="${settings.defaultGraceDays}" /></label>
+          <label class="checkbox"><input type="checkbox" name="selfSignupEnabled" value="1" ${settings.selfSignupEnabled ? 'checked' : ''} /> <span><strong>Registro en línea</strong><br /><small class="subtle">Cualquiera crea su consultorio con prueba gratis.</small></span></label>
+          <label class="checkbox"><input type="checkbox" name="selfDemoEnabled" value="1" ${settings.selfDemoEnabled ? 'checked' : ''} /> <span><strong>Demo con datos en línea</strong><br /><small class="subtle">Se crea sola y se borra al vencer.</small></span></label>
+          <label class="field"><span>Días de prueba gratis <span class="hint" data-tooltip="Para consultorios nuevos (registro en línea o creados por ti).">${icon('info')}</span></span><input name="defaultTrialDays" type="number" min="0" max="365" value="${settings.defaultTrialDays}" /></label>
+          <label class="field"><span>Días de gracia <span class="hint" data-tooltip="Después del vencimiento, días en que aún puede entrar con aviso antes de suspenderse.">${icon('info')}</span></span><input name="defaultGraceDays" type="number" min="0" max="60" value="${settings.defaultGraceDays}" /></label>
+          <label class="field"><span>Duración de la demo (días) <span class="hint" data-tooltip="Se le recuerda al interesado cada día. Al crear su consultorio, la demo sigue 24 horas más y luego se borra.">${icon('info')}</span></span><input name="demoDays" type="number" min="1" max="60" value="${settings.demoDays}" /></label>
+          <label class="field"><span>Máximo de demos activas <span class="hint" data-tooltip="Protege la base de datos gratuita: si se llega al tope, se invita a usar la prueba gratis.">${icon('info')}</span></span><input name="maxSelfDemos" type="number" min="0" max="500" value="${settings.maxSelfDemos}" /></label>
         </div>
         <h3>${icon('credit-card')} Pago en línea con tu Wompi <span class="badge ${settings.wompiConfigured ? 'badge-success' : 'badge-neutral'}">${settings.wompiConfigured ? 'Activo' : 'Inactivo'}</span></h3>
         <p class="subtle">Con esto, tus clientes pagan desde el panel y el acceso se reactiva solo. En Wompi → Desarrolladores, configura la URL de eventos:<br /><code>${settings.webhookUrl}</code></p>
@@ -61,7 +64,10 @@ export async function renderSettingsView(content: HTMLElement, reload: () => Pro
         ownerName: emptyToNull(values.ownerName),
         ownerWhatsapp: emptyToNull(values.ownerWhatsapp),
         paymentInstructions: emptyToNull(values.paymentInstructions),
-        defaultMonthlyPrice: Number(values.defaultMonthlyPrice || 0),
+        demoDays: Number(values.demoDays || 5),
+        maxSelfDemos: Number(values.maxSelfDemos || 0),
+        selfSignupEnabled: values.selfSignupEnabled === '1',
+        selfDemoEnabled: values.selfDemoEnabled === '1',
         defaultTrialDays: Number(values.defaultTrialDays || 0),
         defaultGraceDays: Number(values.defaultGraceDays || 0),
         wompiEnvironment: values.wompiEnvironment || null,

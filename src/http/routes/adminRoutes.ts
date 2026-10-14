@@ -5,7 +5,7 @@ import type { Hono } from 'hono';
 import { z } from 'zod';
 import { isPermission, type Permission } from '../../security/permissions.js';
 import { todayLocal } from '../../utils/time.js';
-import { actorOf, requireAuth, type AppEnv } from '../context.js';
+import { actorOf, requireAuth, type AppEnv, type AuthContext } from '../context.js';
 import { defineRoutes, requiresAny } from '../routeRegistry.js';
 import { idSchema, optionalText, paginationSchema, readIdParam, readJsonBody, readQuery, requiredText } from '../validation.js';
 import { PASSWORD_POLICY } from './authRoutes.js';
@@ -63,7 +63,7 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
       handler: async (context) => {
         const input = await readJsonBody(context, roleSchema);
         const auth = requireAuth(context);
-        return context.json(await context.get('services').users.createRole(actorOf(context), auth.permissions, input), 201);
+        return context.json(await context.get('services').users.createRole(actorOf(context), rolePermissionsOf(auth), input), 201);
       },
     },
     {
@@ -74,7 +74,7 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
         const input = await readJsonBody(context, roleSchema);
         const auth = requireAuth(context);
         return context.json(
-          await context.get('services').users.updateRole(actorOf(context), auth.permissions, readIdParam(context), input),
+          await context.get('services').users.updateRole(actorOf(context), rolePermissionsOf(auth), readIdParam(context), input),
         );
       },
     },
@@ -108,7 +108,7 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
           }),
         );
         const auth = requireAuth(context);
-        return context.json(await context.get('services').users.createUser(actorOf(context), auth.permissions, input), 201);
+        return context.json(await context.get('services').users.createUser(actorOf(context), rolePermissionsOf(auth), input), 201);
       },
     },
     {
@@ -122,7 +122,7 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
         );
         const auth = requireAuth(context);
         return context.json(
-          await context.get('services').users.updateUser(actorOf(context), auth.permissions, readIdParam(context), input),
+          await context.get('services').users.updateUser(actorOf(context), rolePermissionsOf(auth), readIdParam(context), input),
         );
       },
     },
@@ -148,4 +148,13 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
       },
     },
   ]);
+}
+
+/**
+ * Permisos del rol sin recortar por el plan: un administrador en plan Básico
+ * puede asignar el rol Recepción aunque Caja no esté en su plan (se activa
+ * solo si el consultorio mejora el plan).
+ */
+function rolePermissionsOf(auth: AuthContext): ReadonlySet<Permission> {
+  return new Set([...auth.permissions, ...auth.lockedPermissions]);
 }

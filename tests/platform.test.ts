@@ -75,7 +75,7 @@ describe('Plataforma y suscripciones (API)', () => {
       adminEmail: email,
       adminPassword: TEST_PASSWORD,
       paidUntil,
-      monthlyPrice: 99000,
+      customPrice: 99000,
       ...extra,
     });
     assert.equal(created.status, 201, created.text);
@@ -200,10 +200,10 @@ describe('Plataforma y suscripciones (API)', () => {
 
   it('el dueño puede suspender a mano, dar cortesía y cambiar fechas', async () => {
     const clinic = await createRealClinic('manual@prueba.co', addDays(today, 30));
-    const suspend = await platform('PUT', `/api/platform/tenants/${clinic.tenantId}/subscription`, { monthlyPrice: 99000, graceDays: 3, billingMode: 'suspendido', paidUntil: addDays(today, 30), ownerNotes: 'No contesta' });
+    const suspend = await platform('PUT', `/api/platform/tenants/${clinic.tenantId}/subscription`, { selection: { planId: 'completo' }, customPrice: 99000, graceDays: 3, billingMode: 'suspendido', paidUntil: addDays(today, 30), ownerNotes: 'No contesta' });
     assert.equal(suspend.json.subscription.state, 'suspendido');
     assert.equal((await env.request('GET', '/api/patients', { cookie: clinic.cookie })).status, 402);
-    const courtesy = await platform('PUT', `/api/platform/tenants/${clinic.tenantId}/subscription`, { monthlyPrice: 0, graceDays: 3, billingMode: 'exento', paidUntil: null, ownerNotes: null });
+    const courtesy = await platform('PUT', `/api/platform/tenants/${clinic.tenantId}/subscription`, { selection: { planId: 'completo' }, customPrice: 0, graceDays: 3, billingMode: 'exento', paidUntil: null, ownerNotes: null });
     assert.equal(courtesy.json.subscription.state, 'exento');
     assert.equal((await env.request('GET', '/api/patients', { cookie: clinic.cookie })).status, 200);
   });
@@ -326,6 +326,6 @@ describe('Plataforma y suscripciones (API)', () => {
     assert.ok(summary.realClinics >= 5);
     assert.ok(summary.demos >= 1);
     assert.ok(summary.collectedThisMonth >= 99000 * 3);
-    assert.equal((await platform('PUT', `/api/platform/tenants/${demoRow.id}/subscription`, { monthlyPrice: 1, graceDays: 1, billingMode: 'auto', paidUntil: null, ownerNotes: null })).status, 422);
+    assert.equal((await platform('PUT', `/api/platform/tenants/${demoRow.id}/subscription`, { selection: { planId: 'completo' }, customPrice: 1, graceDays: 1, billingMode: 'auto', paidUntil: null, ownerNotes: null })).status, 422);
   });
 });

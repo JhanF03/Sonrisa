@@ -317,7 +317,7 @@ export function mountTurnstile(root: HTMLElement): void {
   document.head.append(script);
 }
 
-function readTurnstileToken(form: HTMLFormElement): string | undefined {
+export function readTurnstileToken(form: HTMLFormElement): string | undefined {
   const input = form.querySelector<HTMLInputElement>('input[name="cf-turnstile-response"]');
   return input?.value || undefined;
 }

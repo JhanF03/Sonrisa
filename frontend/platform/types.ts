@@ -1,5 +1,6 @@
 /** Tipos que devuelve la API de plataforma. */
 import type { SubscriptionStatus } from '../../src/shared/subscription.js';
+import type { PlanModule, PlanSelection } from '../../src/shared/plans.js';
 
 export interface TenantOverview {
   id: string;
@@ -19,6 +20,19 @@ export interface TenantOverview {
   ownerNotes: string | null;
   subscription: SubscriptionStatus;
   lastPaymentAt: string | null;
+  planId: string;
+  planSelection: PlanSelection;
+  customPrice: number | null;
+  modules: PlanModule[];
+  maxProfessionals: number;
+  maxUsers: number;
+  professionals: number;
+  pendingPlan: (PlanSelection & { monthlyPrice: number; effectiveOn: string }) | null;
+  onTrial: boolean;
+  signupSource: 'dueno' | 'registro' | 'autoservicio';
+  demoExpiresAt: string | null;
+  contact: { name: string | null; email: string | null; phone: string | null };
+  convertedTenantId: string | null;
 }
 
 export interface Summary {
@@ -30,6 +44,10 @@ export interface Summary {
   suspended: number;
   monthlyRecurring: number;
   collectedThisMonth: number;
+  trials: number;
+  selfDemos: number;
+  conversions: number;
+  byPlan: Record<string, number>;
 }
 
 export interface PlatformSettings {
@@ -44,6 +62,10 @@ export interface PlatformSettings {
   maskedIntegritySecret: string | null;
   maskedEventsSecret: string | null;
   wompiConfigured: boolean;
+  demoDays: number;
+  selfSignupEnabled: boolean;
+  selfDemoEnabled: boolean;
+  maxSelfDemos: number;
   webhookUrl: string;
   defaults: { trialUntil: string; monthlyPrice: number; graceDays: number };
 }
@@ -59,6 +81,7 @@ export interface PaymentRow {
   notes: string | null;
   void_reason: string | null;
   created_at: string;
+  kind: 'renovacion' | 'cambio_plan';
 }
 
 export interface PlatformAdmin {

@@ -7,13 +7,15 @@
  * proceso programado para suspender ni para reactivar.
  */
 
-export type SubscriptionState = 'exento' | 'al_dia' | 'por_vencer' | 'en_gracia' | 'suspendido';
+export type SubscriptionState = 'exento' | 'al_dia' | 'por_vencer' | 'en_gracia' | 'suspendido' | 'demo_vencida';
 
 export interface SubscriptionInput {
   isShowcase: boolean;
   billingMode: string;
   paidUntil: string | null;
   graceDays: number;
+  /** Solo demos: true si ya pasó su fecha de vencimiento. */
+  demoExpired?: boolean;
 }
 
 export interface SubscriptionStatus {
@@ -56,6 +58,9 @@ export function extendPaidUntil(currentPaidUntil: string | null, today: string, 
 }
 
 export function computeSubscription(input: SubscriptionInput, today: string): SubscriptionStatus {
+  if (input.isShowcase && input.demoExpired) {
+    return { state: 'demo_vencida', paidUntil: null, daysLeft: null, suspendOn: today, blocked: true };
+  }
   if (input.isShowcase || input.billingMode === 'exento') {
     return { state: 'exento', paidUntil: input.paidUntil, daysLeft: null, suspendOn: null, blocked: false };
   }
@@ -79,4 +84,34 @@ export const SUBSCRIPTION_LABELS: Record<SubscriptionState, string> = {
   por_vencer: 'Por vencer',
   en_gracia: 'Vencida (en gracia)',
   suspendido: 'Suspendida',
+  demo_vencida: 'Demo vencida',
 };
+
+/** Columnas del consultorio que definen su suscripción. */
+export interface TenantSubscriptionFields {
+  is_showcase: number;
+  billing_mode: string;
+  paid_until: string | null;
+  grace_days: number;
+  utc_offset_minutes: number;
+  demo_expires_at?: string | null;
+}
+
+/** Fecha local (AAAA-MM-DD) de un consultorio. */
+function localDateOf(utcOffsetMinutes: number, nowMs: number): string {
+  return new Date(nowMs + utcOffsetMinutes * 60_000).toISOString().slice(0, 10);
+}
+
+/** Estado de la suscripción de un consultorio (un solo lugar para armarlo). */
+export function subscriptionOfTenant(tenant: TenantSubscriptionFields, nowMs = Date.now()): SubscriptionStatus {
+  return computeSubscription(
+    {
+      isShowcase: tenant.is_showcase === 1,
+      billingMode: tenant.billing_mode,
+      paidUntil: tenant.paid_until,
+      graceDays: tenant.grace_days,
+      demoExpired: Boolean(tenant.demo_expires_at && Date.parse(tenant.demo_expires_at) <= nowMs),
+    },
+    localDateOf(tenant.utc_offset_minutes, nowMs),
+  );
+}

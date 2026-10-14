@@ -22,6 +22,7 @@ import { registerPaymentRoutes } from './http/routes/paymentRoutes.js';
 import { registerInventoryRoutes } from './http/routes/inventoryRoutes.js';
 import { registerEInvoiceRoutes } from './http/routes/einvoiceRoutes.js';
 import { registerSubscriptionRoutes } from './http/routes/subscriptionRoutes.js';
+import { registerSelfServiceRoutes } from './http/routes/selfServiceRoutes.js';
 import { createServices, type AppServices, type ExternalDependencies } from './services.js';
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -68,6 +69,7 @@ export function createApp(
   registerInventoryRoutes(app);
   registerEInvoiceRoutes(app);
   registerSubscriptionRoutes(app);
+  registerSelfServiceRoutes(app);
 
   app.notFound((context) =>
     context.json({ error: { code: 'NOT_FOUND', message: 'Ruta no encontrada.' } }, 404),

@@ -6,7 +6,8 @@ import { api, setSuspendedHandler, setUnauthorizedHandler } from '../core/api.js
 import { $, html, raw, readForm, safeUrl, setContent, type SafeHtml } from '../core/dom.js';
 import { applyBrandColor, icon, openFormModal, refreshIcons, themeToggleButton, toast } from '../core/ui.js';
 import { renderLogin } from './login.js';
-import { can, loadSession, session } from './session.js';
+import { can, loadSession, lockedByPlan, session } from './session.js';
+import { demoBanner, maybeShowDemoReminder } from './demoReminder.js';
 import { renderSubscriptionView, renderSuspendedScreen, subscriptionBanner } from './subscription.js';
 import { maybeShowWelcome, openContextHelp, renderHelpView, VIEW_RENDERED_EVENT } from './help/helpCenter.js';
 import { renderAgendaView } from './views/agendaView.js';
@@ -49,7 +50,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: 'servicios', label: 'Servicios', iconName: 'stethoscope', tooltip: 'Catálogo, precios y duración', permissions: ['servicios.ver', 'servicios.gestionar'], section: 'Administración', render: renderServicesView },
   { path: 'inventario', label: 'Inventario', iconName: 'package', tooltip: 'Insumos, existencias, movimientos y costo por servicio', permissions: ['inventario.ver'], section: 'Administración', render: renderInventoryView },
   { path: 'configuracion', label: 'Configuración', iconName: 'settings', tooltip: 'Consultorio, profesionales, horarios y bloqueos', permissions: ['configuracion.consultorio', 'configuracion.profesionales', 'agenda.bloquear', 'pagos.configurar'], section: 'Administración', render: renderSettingsView },
-  { path: 'suscripcion', label: 'Mi suscripción', iconName: 'badge-check', tooltip: 'Estado y pago de Agenda Sonrisa', permissions: ['suscripcion.pagar'], section: 'Administración', render: renderSubscriptionView },
+  { path: 'suscripcion', label: 'Mi plan', iconName: 'badge-check', tooltip: 'Plan, módulos, límites y pago de Agenda Sonrisa', permissions: ['suscripcion.pagar'], section: 'Administración', render: renderSubscriptionView },
   { path: 'usuarios', label: 'Usuarios y roles', iconName: 'shield-check', tooltip: 'Accesos y permisos granulares', permissions: ['usuarios.gestionar', 'roles.gestionar'], section: 'Administración', render: renderUsersView },
   { path: 'auditoria', label: 'Auditoría', iconName: 'scroll-text', tooltip: 'Quién hizo qué y cuándo', permissions: ['auditoria.ver'], section: 'Administración', render: renderAuditView },
   { path: 'ayuda', label: 'Aprende a usarlo', iconName: 'graduation-cap', tooltip: 'Guías paso a paso y recorridos guiados de cada módulo', permissions: [], section: 'Administración', render: renderHelpView },
@@ -99,7 +100,7 @@ export async function startAdminApp(root: HTMLElement): Promise<void> {
   }
   root.onclick = null;
   renderShell();
-  window.setTimeout(maybeShowWelcome, 600);
+  window.setTimeout(() => (maybeShowDemoReminder() ? undefined : maybeShowWelcome()), 600);
   window.removeEventListener('hashchange', handleRoute);
   window.addEventListener('hashchange', handleRoute);
   await handleRoute();
@@ -109,6 +110,11 @@ function allowedNavItems(): NavItem[] {
   return NAV_ITEMS.filter((item) => item.permissions.length === 0 || can(...item.permissions));
 }
 
+/** Módulos que el rol permitiría pero el plan no incluye: se muestran con candado. */
+function lockedNavItems(): NavItem[] {
+  return NAV_ITEMS.filter((item) => item.permissions.length > 0 && lockedByPlan(...item.permissions));
+}
+
 function renderShell(): void {
   const { user, clinic } = session();
   const initials = user.fullName.split(' ').slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('');
@@ -116,21 +122,25 @@ function renderShell(): void {
 
   const navMarkup: SafeHtml[] = sections.flatMap((section) => {
     const items = allowedNavItems().filter((item) => item.section === section);
-    if (items.length === 0) return [];
+    const locked = lockedNavItems().filter((item) => item.section === section);
+    if (items.length === 0 && locked.length === 0) return [];
+    const upgradeHint = can('suscripcion.pagar') ? 'No está en tu plan: tócalo para ver cómo agregarlo' : 'No está en el plan del consultorio. Pídele al administrador que lo agregue.';
     return [
       html`<div class="nav-section">${section}</div>`,
       ...items.map(
         (item) => html`<a class="nav-link" href="#/${item.path}" data-nav="${item.path}" data-tooltip="${item.tooltip}" data-tooltip-position="right">
           ${icon(item.iconName)}<span>${item.label}</span></a>`,
       ),
+      ...locked.map(
+        (item) => html`<a class="nav-link is-locked" href="${can('suscripcion.pagar') ? '#/suscripcion' : '#'}" data-locked="${item.path}" data-tooltip="${upgradeHint}" data-tooltip-position="right">
+          ${icon(item.iconName)}<span>${item.label}</span><span class="lock-mark">${icon('lock')}</span></a>`,
+      ),
     ];
   });
 
   setContent(
     appRoot,
-    html`${clinic.isShowcase
-        ? html`<div class="showcase-banner">${icon('sparkles')} Esta es una demostración con datos ficticios. Explora con libertad: nada de lo que hagas afecta a pacientes reales.</div>`
-        : ''}
+    html`${clinic.isShowcase ? demoBanner() : ''}
       ${subscriptionBanner() ?? ''}
       <div class="shell" id="shell">
         <aside class="sidebar" aria-label="Menú principal">

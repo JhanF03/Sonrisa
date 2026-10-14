@@ -7,6 +7,7 @@ import type { Actor } from '../../http/context.js';
 import { AppError, notFound } from '../../http/errors.js';
 import { isoNow } from '../../utils/time.js';
 import type { AuditService } from '../audit/auditService.js';
+import type { PlanService } from '../plans/planService.js';
 
 export interface ProfessionalRow {
   id: string;
@@ -52,6 +53,8 @@ export class ProfessionalService {
   constructor(
     private readonly db: SqlDatabase,
     private readonly audit: AuditService,
+    /** Límite de profesionales del plan (opcional para scripts como el seed). */
+    private readonly seats?: Pick<PlanService, 'assertSeatAvailable'>,
   ) {}
 
   async list(tenantId: string, options: { onlyActive?: boolean } = {}): Promise<ProfessionalRow[]> {
@@ -77,6 +80,7 @@ export class ProfessionalService {
 
   async create(actor: Actor, input: ProfessionalInput): Promise<ProfessionalRow> {
     await this.assertUserBelongsToTenant(actor.tenantId, input.userId);
+    if (input.isActive) await this.seats?.assertSeatAvailable(actor.tenantId, 'profesional');
     const professionalId = crypto.randomUUID();
     await this.db.batch([
       this.db
@@ -91,8 +95,9 @@ export class ProfessionalService {
   }
 
   async update(actor: Actor, professionalId: string, input: ProfessionalInput): Promise<ProfessionalRow> {
-    await this.getById(actor.tenantId, professionalId);
+    const current = await this.getById(actor.tenantId, professionalId);
     await this.assertUserBelongsToTenant(actor.tenantId, input.userId);
+    if (input.isActive && current.is_active !== 1) await this.seats?.assertSeatAvailable(actor.tenantId, 'profesional');
     await this.db.batch([
       this.db
         .prepare(

@@ -4,13 +4,14 @@
 import { api } from '../../core/api.js';
 import { html, setContent, type SafeHtml } from '../../core/dom.js';
 import { formatMoney } from '../../core/format.js';
-import { emptyState, icon, refreshIcons } from '../../core/ui.js';
+import { copyToClipboard, emptyState, icon, refreshIcons } from '../../core/ui.js';
 import { type Summary, type TenantOverview } from '../types.js';
 
-import { attachClinicActions, clinicsTable } from './clinicsView.js';
+import { attachClinicActions, clinicsTable, loadPlanNames } from './clinicsView.js';
 
 export async function renderSummaryView(content: HTMLElement): Promise<void> {
-  const [summary, tenants] = await Promise.all([api.get<Summary>('/api/platform/summary'), api.get<TenantOverview[]>('/api/platform/tenants')]);
+  const [summary, tenants] = await Promise.all([api.get<Summary>('/api/platform/summary'), api.get<TenantOverview[]>('/api/platform/tenants'), loadPlanNames()]);
+  const signupUrl = `${window.location.origin}/registro`;
   const attention = tenants
     .filter((tenant) => !tenant.isShowcase && ['por_vencer', 'en_gracia', 'suspendido'].includes(tenant.subscription.state))
     .sort((a, b) => (a.subscription.paidUntil ?? '').localeCompare(b.subscription.paidUntil ?? ''));
@@ -26,7 +27,16 @@ export async function renderSummaryView(content: HTMLElement): Promise<void> {
         ${kpi('wallet', html`<span class="money">${formatMoney(summary.collectedThisMonth)}</span>`, 'Recaudado este mes')}
         ${kpi('calendar-clock', String(summary.dueSoon), 'Vencen en 5 días o menos', summary.dueSoon ? 'is-danger' : 'is-info')}
         ${kpi('lock', String(summary.suspended + summary.inGrace), `Vencidos · ${summary.suspended} suspendidos`, summary.suspended ? 'is-danger' : 'is-info')}
+        ${kpi('gift', String(summary.trials), 'En prueba gratis', 'is-info')}
+        ${kpi('rocket', `${summary.selfDemos} · ${summary.conversions}`, 'Demos de autoservicio · registros', 'is-info')}
       </div></section>
+      <section class="card card-padded" style="margin-top: 16px">
+        <h3>${icon('link')} Tu página de planes y registro <span class="hint" data-tooltip="Compártela en tu web, redes o WhatsApp. Ahí los interesados ven precios, crean su demo o su consultorio con prueba gratis y pagan solos.">${icon('info')}</span></h3>
+        <div class="secret-row"><code>${signupUrl}</code>
+          <button class="icon-button" data-copy-signup aria-label="Copiar enlace" data-tooltip="Copiar enlace">${icon('copy')}</button>
+          <a class="icon-button" href="/registro" target="_blank" rel="noopener" aria-label="Abrir" data-tooltip="Abrir la página">${icon('external-link')}</a></div>
+        <p class="subtle">Atajos: <code>/registro?accion=demo</code> abre la demo · <code>/registro?plan=profesional</code> preselecciona un plan.</p>
+      </section>
       <section class="card" style="margin-top: 16px">
         <div class="card-header"><h3>${icon('triangle-alert')} Requieren atención</h3></div>
         ${attention.length === 0
@@ -36,5 +46,6 @@ export async function renderSummaryView(content: HTMLElement): Promise<void> {
   );
   refreshIcons(content);
   attachClinicActions(content, attention, () => renderSummaryView(content));
+  content.querySelector('[data-copy-signup]')?.addEventListener('click', () => void copyToClipboard(signupUrl, 'Enlace copiado.'));
 }
 

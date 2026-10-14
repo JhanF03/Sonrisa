@@ -4,8 +4,8 @@
 import type { Hono } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
-import { computeSubscription } from '../../shared/subscription.js';
-import { todayLocal } from '../../utils/time.js';
+import { subscriptionOfTenant } from '../../shared/subscription.js';
+import { ALL_PLAN_MODULES, parseModules } from '../../shared/plans.js';
 import { PERMISSION_CATALOG } from '../../security/permissions.js';
 import { actorOf, requireAuth, type AppEnv } from '../context.js';
 import { getSessionCookieName } from '../middleware.js';
@@ -78,12 +78,18 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
             utcOffsetMinutes: auth.tenant.utc_offset_minutes,
           },
           subscription: {
-            ...computeSubscription(
-              { isShowcase: auth.tenant.is_showcase === 1, billingMode: auth.tenant.billing_mode, paidUntil: auth.tenant.paid_until, graceDays: auth.tenant.grace_days },
-              todayLocal(auth.tenant.utc_offset_minutes),
-            ),
+            ...subscriptionOfTenant(auth.tenant),
             monthlyPrice: auth.tenant.monthly_price,
+            onTrial: auth.tenant.on_trial === 1,
           },
+          plan: {
+            id: auth.tenant.plan_id,
+            modules: auth.tenant.is_showcase === 1 ? ALL_PLAN_MODULES : parseModules(auth.tenant.enabled_modules),
+            lockedPermissions: [...auth.lockedPermissions],
+          },
+          demo: auth.tenant.is_showcase === 1
+            ? { expiresAt: auth.tenant.demo_expires_at, loginEmail: auth.email, convertedTenantId: auth.tenant.converted_tenant_id }
+            : null,
         });
       },
     },

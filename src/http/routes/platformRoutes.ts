@@ -20,6 +20,7 @@ import { getSessionCookieName } from '../middleware.js';
 import { defineRoutes, publicAccess } from '../routeRegistry.js';
 import { hexColorSchema, httpsUrlSchema, localDateSchema, moneySchema, optionalText, positiveMoneySchema, readIdParam, readJsonBody, requiredText } from '../validation.js';
 import { PASSWORD_POLICY } from './authRoutes.js';
+import { planSelectionSchema } from './selfServiceRoutes.js';
 
 export const PLATFORM_KEY_HEADER = 'X-Platform-Key';
 
@@ -216,7 +217,8 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
         const input = await readJsonBody(
           context,
           z.object({
-            monthlyPrice: moneySchema.max(100_000_000),
+            selection: planSelectionSchema,
+            customPrice: moneySchema.max(100_000_000).nullable(),
             graceDays: z.number().int().min(0).max(60),
             billingMode: z.enum(['auto', 'exento', 'suspendido']),
             paidUntil: localDateSchema.nullable(),
@@ -280,6 +282,69 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       },
     },
     {
+      method: 'DELETE',
+      path: '/api/platform/tenants/:id',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        await context.get('services').platform.deleteDemo(readIdParam(context), context.get('clientIp'), 'dueno');
+        return context.json({ ok: true });
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/api/platform/tenants/:id/demo-expiry',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        const { days } = await readJsonBody(context, z.object({ days: z.number().int().min(1).max(365).nullable() }));
+        const expiresAt = days === null ? null : new Date(Date.now() + days * 86_400_000).toISOString();
+        return context.json(await context.get('services').platform.setDemoExpiry(readIdParam(context), expiresAt, context.get('clientIp')));
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/platform/plans',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        return context.json(await context.get('services').plans.getCatalog());
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/api/platform/plans',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        const money = moneySchema.max(100_000_000);
+        const input = await readJsonBody(
+          context,
+          z.object({
+            plans: z.array(z.object({
+              id: z.string().max(40),
+              name: requiredText(40, 'El nombre del plan'),
+              description: z.string().trim().max(300).default(''),
+              monthlyPrice: money,
+              maxProfessionals: z.number().int().min(1).max(500),
+              maxUsers: z.number().int().min(1).max(1000),
+              modules: z.array(z.enum(['finanzas', 'inventario', 'facturacion', 'auditoria'])).max(4),
+              sortOrder: z.number().int().min(0).max(100),
+              isActive: z.boolean(),
+            })).min(1).max(10),
+            addons: z.array(z.object({
+              id: z.enum(['finanzas', 'inventario', 'facturacion', 'auditoria', 'profesional', 'usuario']),
+              name: requiredText(60, 'El nombre del adicional'),
+              monthlyPrice: money,
+              isActive: z.boolean(),
+            })).max(6),
+            annualFreeMonths: z.number().int().min(0).max(6),
+          }),
+        );
+        return context.json(await context.get('services').plans.saveCatalog(input, context.get('clientIp')));
+      },
+    },
+    {
       method: 'POST',
       path: '/api/platform/tenants/:id/reset-admin-password',
       access: publicAccess,
@@ -312,13 +377,18 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
             ownerName: optionalText(120),
             ownerWhatsapp: optionalText(30),
             paymentInstructions: optionalText(2000),
-            defaultMonthlyPrice: moneySchema.max(100_000_000),
+            defaultMonthlyPrice: moneySchema.max(100_000_000).default(0),
             defaultGraceDays: z.number().int().min(0).max(60),
             defaultTrialDays: z.number().int().min(0).max(365),
             wompiEnvironment: z.enum(['sandbox', 'production']).nullable(),
             wompiPublicKey: optionalSecret,
             wompiIntegritySecret: optionalSecret,
             wompiEventsSecret: optionalSecret,
+            // Opcionales: si no llegan, se conserva lo guardado.
+            demoDays: z.number().int().min(1).max(60).optional(),
+            selfSignupEnabled: z.boolean().optional(),
+            selfDemoEnabled: z.boolean().optional(),
+            maxSelfDemos: z.number().int().min(0).max(500).optional(),
           }),
         );
         return context.json(await context.get('services').platform.saveSettings(input, context.get('clientIp')));
@@ -350,7 +420,7 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       access: publicAccess,
       handler: async (context) => {
         await assertPlatform(context);
-        const input = await readJsonBody(context, clinicBaseSchema);
+        const input = await readJsonBody(context, clinicBaseSchema.extend({ expiresInDays: z.number().int().min(1).max(365).nullable().default(null) }));
         const services = context.get('services');
 
         const demoPassword = `Demo-${generateSecureToken(9)}1`;
@@ -362,6 +432,9 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
         const tenant = await services.tenants.getById(tenantId);
         await seedDemoData(context.get('db'), tenantId, tenant.utc_offset_minutes, adminUserId);
         await services.platform.auditClinicCreated(tenantId, 'demo', context.get('clientIp'));
+        if (input.expiresInDays) {
+          await services.platform.setDemoExpiry(tenantId, new Date(Date.now() + input.expiresInDays * 86_400_000).toISOString(), context.get('clientIp'));
+        }
 
         const origin = new URL(context.req.url).origin;
         return context.json({ slug, bookingUrl: `${origin}/c/${slug}`, panelUrl: `${origin}/app`, login: { email: demoEmail, password: demoPassword } }, 201);
@@ -381,18 +454,21 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
             adminFullName: requiredText(120, 'El nombre del administrador'),
             adminEmail: z.email('Correo inválido.').max(200),
             adminPassword: PASSWORD_POLICY,
-            monthlyPrice: moneySchema.max(100_000_000).default(defaults.monthlyPrice),
+            planId: z.string().max(40).default('completo'),
+            customPrice: moneySchema.max(100_000_000).nullable().default(null),
             graceDays: z.number().int().min(0).max(60).default(defaults.graceDays),
             paidUntil: localDateSchema.default(defaults.trialUntil),
           }),
         );
+        const resolved = await services.plans.resolve({ planId: input.planId, addonModules: [], extraProfessionals: 0, extraUsers: 0 }, { allowInactivePlan: true });
         const { slug, tenantId } = await services.tenants.createTenant(
           {
             name: input.clinicName, city: input.city, phone: input.phone, brandColor: input.brandColor, logoUrl: input.logoUrl,
-            paidUntil: input.paidUntil, monthlyPrice: input.monthlyPrice, graceDays: input.graceDays,
+            paidUntil: input.paidUntil, monthlyPrice: input.customPrice ?? resolved.monthlyPrice, graceDays: input.graceDays,
           },
           { fullName: input.adminFullName, email: input.adminEmail, passwordHash: await services.auth.hashNewPassword(input.adminPassword) },
         );
+        await services.platform.setInitialPlan(tenantId, resolved, input.customPrice);
         await services.platform.auditClinicCreated(tenantId, 'real', context.get('clientIp'));
         const origin = new URL(context.req.url).origin;
         return context.json({ slug, bookingUrl: `${origin}/c/${slug}`, panelUrl: `${origin}/app`, paidUntil: input.paidUntil }, 201);

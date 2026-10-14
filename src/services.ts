@@ -13,6 +13,7 @@ import { CatalogService } from './modules/catalog/catalogService.js';
 import { InventoryService } from './modules/inventory/inventoryService.js';
 import { PurchaseService } from './modules/inventory/purchaseService.js';
 import { EInvoiceService } from './modules/einvoicing/einvoiceService.js';
+import { PlanService } from './modules/plans/planService.js';
 import { PlatformService } from './modules/platform/platformService.js';
 import { PlatformAuthService } from './modules/platform/platformAuthService.js';
 import { MaintenanceService } from './modules/maintenance/maintenanceService.js';
@@ -47,6 +48,7 @@ export interface AppServices {
   purchases: PurchaseService;
   einvoices: EInvoiceService;
   platform: PlatformService;
+  plans: PlanService;
   platformAuth: PlatformAuthService;
   turnstile: TurnstileVerifier;
 }
@@ -61,7 +63,8 @@ export function createServices(db: SqlDatabase, config: AppConfig, external: Ext
   const rateLimiter = new RateLimiter(db);
   const auth = new AuthService(db, config, rateLimiter, audit);
   const tenants = new TenantService(db, audit);
-  const professionals = new ProfessionalService(db, audit);
+  const plans = new PlanService(db);
+  const professionals = new ProfessionalService(db, audit, plans);
   const catalog = new CatalogService(db, audit);
   const patients = new PatientService(db, audit);
   const availability = new AvailabilityService(db);
@@ -70,6 +73,7 @@ export function createServices(db: SqlDatabase, config: AppConfig, external: Ext
   const payments = new PaymentService(db, config, audit, appointments, patients, new WompiApi(external.fetch));
 
   const inventory = new InventoryService(db, audit);
+  const platform = new PlatformService(db, config, auth, new WompiApi(external.fetch), plans);
 
   // Al atender una cita: los anticipos pagados en línea se abonan a su cargo
   // y se descuentan los insumos de la receta del servicio.
@@ -96,13 +100,14 @@ export function createServices(db: SqlDatabase, config: AppConfig, external: Ext
     waitlist: new WaitlistService(db, audit, patients),
     billing,
     reports: new ReportService(db),
-    users: new UserService(db, audit, auth),
+    users: new UserService(db, audit, auth, plans),
     payments,
-    maintenance: new MaintenanceService(db, appointments, payments),
+    maintenance: new MaintenanceService(db, appointments, payments, platform),
     inventory,
     purchases: new PurchaseService(db, audit, inventory),
     einvoices: new EInvoiceService(db, config, audit, external.fetch),
-    platform: new PlatformService(db, config, auth, new WompiApi(external.fetch)),
+    platform,
+    plans,
     platformAuth: new PlatformAuthService(db, config, auth, rateLimiter),
     turnstile: new TurnstileVerifier(config.turnstileSecretKey, external.fetch),
   };

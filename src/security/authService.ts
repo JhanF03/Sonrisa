@@ -15,6 +15,7 @@ import { isoNow } from '../utils/time.js';
 import type { AuditService } from '../modules/audit/auditService.js';
 import { generateSecureToken, getHashIterations, hashPassword, sha256Hex, verifyPassword } from './crypto.js';
 import { isPermission, type Permission } from './permissions.js';
+import { ALL_PLAN_MODULES, moduleOfPermission, parseModules } from '../shared/plans.js';
 import { RATE_LIMIT_RULES, type RateLimiter } from './rateLimiter.js';
 
 const INVALID_CREDENTIALS_MESSAGE = 'Correo o contraseña incorrectos.';
@@ -146,12 +147,22 @@ export class AuthService {
         .run();
     }
 
+    // El plan del consultorio recorta los permisos del rol (las demos tienen todo).
+    const enabledModules = tenant.is_showcase === 1 ? ALL_PLAN_MODULES : parseModules(tenant.enabled_modules);
+    const allowed = new Set<Permission>();
+    const locked = new Set<Permission>();
+    for (const permission of permissions) {
+      const module = moduleOfPermission(permission);
+      (module === null || enabledModules.includes(module) ? allowed : locked).add(permission);
+    }
+
     return {
       userId: sessionRow.user_id,
       email: sessionRow.email,
       fullName: sessionRow.full_name,
       tenant,
-      permissions,
+      permissions: allowed,
+      lockedPermissions: locked,
       professionalId: professional?.id ?? null,
     };
   }

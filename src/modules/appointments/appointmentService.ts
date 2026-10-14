@@ -19,7 +19,7 @@
  * y la limpieza programada la marca como cancelada después.
  */
 import type { SqlDatabase, SqlStatement, SqlValue } from '../../db/database.js';
-import { computeSubscription } from '../../shared/subscription.js';
+import { subscriptionOfTenant } from '../../shared/subscription.js';
 import { isSlotTakenError, occupiesSlot, SQL_NOW_UTC } from '../../db/sqlFragments.js';
 import type { Actor, TenantRow } from '../../http/context.js';
 import { AppError, conflict, notFound } from '../../http/errors.js';
@@ -901,8 +901,5 @@ function assertInFuture(tenant: TenantRow, appointment: AppointmentRow): void {
 
 /** Suscripción suspendida por falta de pago: no se reciben reservas en línea nuevas. */
 export function isTenantSuspended(tenant: TenantRow): boolean {
-  return computeSubscription(
-    { isShowcase: tenant.is_showcase === 1, billingMode: tenant.billing_mode, paidUntil: tenant.paid_until, graceDays: tenant.grace_days },
-    todayLocal(tenant.utc_offset_minutes),
-  ).blocked;
+  return subscriptionOfTenant(tenant).blocked;
 }
