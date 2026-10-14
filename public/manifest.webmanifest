@@ -1,0 +1,10 @@
+{
+  "name": "Agenda Sonrisa",
+  "short_name": "Agenda",
+  "start_url": "/app",
+  "display": "standalone",
+  "background_color": "#f4f3ef",
+  "theme_color": "#3f6f68",
+  "lang": "es",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

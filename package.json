@@ -1,0 +1,48 @@
+{
+  "name": "agenda-sonrisa",
+  "version": "1.0.0",
+  "description": "Agenda Sonrisa: agenda, pacientes, caja y cartera para consultorios odontológicos. Fase 1.",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build-frontend.mjs",
+    "start": "node scripts/build-frontend.mjs && tsx src/node/server.ts",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.worker.json && tsc -p frontend/tsconfig.json",
+    "lint": "eslint .",
+    "test": "tsx --test tests/*.test.ts",
+    "audit:deps": "npm audit --audit-level=high --omit=dev",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build && npm run audit:deps",
+    "cf:migrate:local": "wrangler d1 migrations apply agenda-sonrisa --local",
+    "cf:migrate:remote": "wrangler d1 migrations apply agenda-sonrisa --remote",
+    "cf:dev": "npm run build && wrangler dev",
+    "cf:deploy": "npm run build && wrangler deploy",
+    "cf:verify": "npm run build && wrangler deploy --dry-run --outdir .wrangler/dry-run"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@hono/node-server": "^2.1.4",
+    "better-sqlite3": "^13.0.3",
+    "hono": "^4.13.13",
+    "lucide": "^1.55.0",
+    "write-excel-file": "^4.1.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261012.1",
+    "@eslint/js": "^10.0.1",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.5",
+    "@xmldom/xmldom": "^0.9.12",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.12.0",
+    "eslint-plugin-security": "^4.2.0",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "wrangler": "^4.149.0"
+  },
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  }
+}

@@ -1,0 +1,4 @@
+# Copia este archivo como .dev.vars para `npm run cf:dev` (no se sube a git).
+APP_SECRET=cambia-esto-por-una-cadena-aleatoria-de-32-o-mas-caracteres
+PLATFORM_ADMIN_KEY=cambia-esto-por-otra-clave-larga-de-24-o-mas
+ENVIRONMENT=development

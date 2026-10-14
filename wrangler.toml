@@ -1,0 +1,42 @@
+# Configuración de Cloudflare Workers (plan gratuito).
+# Documentación: https://developers.cloudflare.com/workers/wrangler/configuration/
+name = "agenda-sonrisa"
+main = "src/worker.ts"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# Cloudflare sirve el frontend directamente; el Worker solo atiende /api/*.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# Base de datos SQLite gratuita (D1).
+# Crea la base con:  npx wrangler d1 create agenda-sonrisa
+# y reemplaza database_id por el valor que te muestre el comando.
+[[d1_databases]]
+binding = "DB"
+database_name = "agenda-sonrisa"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[vars]
+ENVIRONMENT = "production"
+PASSWORD_HASH_ITERATIONS = "100000"
+SESSION_TTL_HOURS = "12"
+
+# Secretos (NUNCA en este archivo). Configúralos con:
+#   npx wrangler secret put APP_SECRET
+#   npx wrangler secret put PLATFORM_ADMIN_KEY
+
+# Tarea de mantenimiento cada 10 minutos (el plan gratuito permite 5 por cuenta).
+[triggers]
+crons = ["*/10 * * * *"]
+
+# Opcional: Cloudflare Turnstile (anti-robots gratis). Configúralo con:
+#   npx wrangler secret put TURNSTILE_SITE_KEY
+#   npx wrangler secret put TURNSTILE_SECRET_KEY
+
+[observability]
+enabled = true
