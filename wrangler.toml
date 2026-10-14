@@ -18,7 +18,7 @@ run_worker_first = ["/api/*"]
 [[d1_databases]]
 binding = "DB"
 database_name = "agenda-sonrisa"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "0d5d803b-af0e-4005-8da4-28b05953bb52"
 migrations_dir = "migrations"
 
 [vars]
