@@ -16,6 +16,7 @@ import { generateSecureToken } from '../../security/crypto.js';
 import type { PlatformAdmin } from '../../modules/platform/platformAuthService.js';
 import type { AppContext, AppEnv } from '../context.js';
 import { AppError } from '../errors.js';
+import { getSessionCookieName } from '../middleware.js';
 import { defineRoutes, publicAccess } from '../routeRegistry.js';
 import { hexColorSchema, httpsUrlSchema, localDateSchema, moneySchema, optionalText, positiveMoneySchema, readIdParam, readJsonBody, requiredText } from '../validation.js';
 import { PASSWORD_POLICY } from './authRoutes.js';
@@ -256,6 +257,26 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
         const { reason } = await readJsonBody(context, z.object({ reason: requiredText(200, 'El motivo') }));
         await context.get('services').platform.voidPayment(readIdParam(context), reason, context.get('clientIp'));
         return context.json({ ok: true });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/platform/tenants/:id/demo-session',
+      access: publicAccess,
+      handler: async (context) => {
+        await requirePlatformAdmin(context);
+        const session = await context
+          .get('services')
+          .platform.createDemoSession(readIdParam(context), context.get('clientIp'), context.req.header('User-Agent') ?? '');
+        // Sesión normal del panel del consultorio (la misma cookie que al ingresar con usuario y contraseña).
+        setCookie(context, getSessionCookieName(context.req.url), session.token, {
+          httpOnly: true,
+          secure: new URL(context.req.url).protocol === 'https:',
+          sameSite: 'Strict',
+          path: '/',
+          expires: new Date(session.expiresAt),
+        });
+        return context.json({ ok: true, panelUrl: '/app' });
       },
     },
     {

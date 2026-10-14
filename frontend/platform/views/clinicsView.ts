@@ -34,8 +34,9 @@ export function clinicsTable(tenants: TenantOverview[], isDemo: boolean): SafeHt
         ${isDemo ? '' : html`<button class="button button-primary button-small" data-pay="${tenant.id}">${icon('circle-dollar-sign')} Pago</button>
           <button class="icon-button" data-plan="${tenant.id}" aria-label="Plan y fechas" data-tooltip="Plan, fechas y suspensión">${icon('pencil')}</button>
           <button class="icon-button" data-history="${tenant.id}" aria-label="Historial" data-tooltip="Historial de pagos">${icon('receipt')}</button>`}
+        ${isDemo ? html`<button class="button button-primary button-small" data-open-demo="${tenant.id}" data-tooltip="Entra al panel de administración de la demo (agenda, caja, inventario…) como su administrador">${icon('layout-dashboard')} Abrir panel</button>` : ''}
         <button class="icon-button" data-reset="${tenant.id}" aria-label="Restablecer clave" data-tooltip="Restablecer la clave del administrador">${icon('key-round')}</button>
-        <a class="icon-button" href="/c/${tenant.slug}" target="_blank" rel="noopener" aria-label="Página de reservas" data-tooltip="Página de reservas">${icon('external-link')}</a>
+        <a class="icon-button" href="/c/${tenant.slug}" target="_blank" rel="noopener" aria-label="Página de reservas" data-tooltip="Página de reservas de los pacientes">${icon('calendar-plus')}</a>
       </div></td>
     </tr>`)}</tbody></table></div>`;
 }
@@ -104,6 +105,8 @@ export function attachClinicActions(content: HTMLElement, tenants: TenantOvervie
     if (toHistory) void openHistoryModal(toHistory, reload);
     const toReset = find('data-reset');
     if (toReset) confirmResetPassword(toReset);
+    const toOpen = find('data-open-demo');
+    if (toOpen) void openDemoPanel(toOpen);
   };
 }
 
@@ -232,3 +235,19 @@ function confirmResetPassword(tenant: TenantOverview): void {
   });
 }
 
+
+/**
+ * Abre el panel de administración de la demo en otra pestaña, ya con sesión.
+ * La pestaña se abre antes de la petición para que el navegador no la bloquee.
+ */
+async function openDemoPanel(tenant: TenantOverview): Promise<void> {
+  const tab = window.open('about:blank', '_blank');
+  try {
+    const result = await api.post<{ panelUrl: string }>(`/api/platform/tenants/${tenant.id}/demo-session`);
+    if (tab) tab.location.href = result.panelUrl;
+    else window.location.href = result.panelUrl;
+  } catch (error) {
+    tab?.close();
+    toast(error instanceof Error ? error.message : 'No se pudo abrir la demo.', 'error');
+  }
+}

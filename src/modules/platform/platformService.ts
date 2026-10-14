@@ -13,7 +13,7 @@
 import type { SqlDatabase } from '../../db/database.js';
 import type { AppConfig, TenantRow } from '../../http/context.js';
 import { AppError, notFound } from '../../http/errors.js';
-import { generateSecureToken } from '../../security/crypto.js';
+import { generateSecureToken, sha256Hex } from '../../security/crypto.js';
 import { decryptSecret, encryptSecret, maskSecret } from '../../security/secretBox.js';
 import {
   addDaysToDate,
@@ -389,6 +389,33 @@ export class PlatformService {
     if ((outcome[0]?.meta?.changes ?? 0) === 0) {
       throw new AppError('Solo se puede anular el pago más reciente (o la fecha de pago se cambió a mano).', 409, 'NOT_LATEST');
     }
+  }
+
+  /**
+   * Abre el panel de una DEMO como su administrador (para mostrarla o revisarla).
+   * Solo demos: los consultorios reales tienen datos de pacientes reales.
+   */
+  async createDemoSession(tenantId: string, ip: string, userAgent: string): Promise<{ token: string; expiresAt: number }> {
+    const tenant = await this.getTenant(tenantId);
+    if (tenant.is_showcase !== 1) throw new AppError('Solo se puede abrir el panel de las demos.', 403, 'NOT_SHOWCASE');
+    const admin = await this.db
+      .prepare(
+        `SELECT u.id FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN roles r ON r.id = ur.role_id
+         WHERE u.tenant_id = ? AND r.is_system = 1 AND u.is_active = 1 ORDER BY u.created_at LIMIT 1`,
+      )
+      .bind(tenantId)
+      .first<{ id: string }>();
+    if (!admin) throw new AppError('La demo no tiene un administrador activo.', 409, 'NO_ADMIN');
+    const token = generateSecureToken(32);
+    const expiresAt = Date.now() + this.config.sessionTtlHours * 3_600_000;
+    await this.db.batch([
+      this.db
+        .prepare('INSERT INTO sessions (token_hash, user_id, tenant_id, expires_at, created_at, ip, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(await sha256Hex(token), admin.id, tenantId, expiresAt, isoNow(), ip, userAgent.slice(0, 300)),
+      this.db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').bind(isoNow(), admin.id),
+      this.auditStatement('demo_abierta', tenantId, null, ip),
+    ]);
+    return { token, expiresAt };
   }
 
   /** Restablece la contraseña del primer administrador activo y cierra sus sesiones. */

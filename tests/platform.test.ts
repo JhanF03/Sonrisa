@@ -296,6 +296,24 @@ describe('Plataforma y suscripciones (API)', () => {
     });
   });
 
+  it('el dueño abre el panel de administración de una demo (solo demos)', async () => {
+    const demo = await platform('POST', '/api/platform/showcase', { clinicName: 'Demo Para Abrir' });
+    const tenants = (await platform('GET', '/api/platform/tenants')).json;
+    const demoRow = tenants.find((row: { slug: string }) => row.slug === demo.json.slug);
+    assert.equal((await env.request('POST', `/api/platform/tenants/${demoRow.id}/demo-session`)).status, 401, 'Sin sesión de dueño');
+    const opened = await platform('POST', `/api/platform/tenants/${demoRow.id}/demo-session`);
+    assert.equal(opened.status, 200, opened.text);
+    const clinicCookie = (opened.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
+    assert.match(clinicCookie, /^sid=/);
+    const me = await env.request('GET', '/api/auth/me', { cookie: clinicCookie });
+    assert.equal(me.json.clinic.name, 'Demo Para Abrir');
+    assert.ok(me.json.permissions.includes('agenda.ver_todas'), 'Entra como administrador de la demo');
+    assert.equal((await env.request('GET', '/api/patients', { cookie: clinicCookie })).status, 200);
+
+    const real = tenants.find((row: { isShowcase: boolean }) => !row.isShowcase);
+    assert.equal((await platform('POST', `/api/platform/tenants/${real.id}/demo-session`)).status, 403, 'Nunca a un consultorio real');
+  });
+
   it('el panel muestra reales y demos con sus indicadores', async () => {
     const demo = await platform('POST', '/api/platform/showcase', { clinicName: 'Demo Panel' });
     assert.equal(demo.status, 201);
