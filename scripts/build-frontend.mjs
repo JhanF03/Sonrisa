@@ -1,5 +1,7 @@
 /**
- * Compila el frontend (TypeScript) a public/assets/app.js con esbuild.
+ * Compila el frontend (TypeScript) con esbuild:
+ *   public/assets/app.js       → app de los consultorios (index.html)
+ *   public/assets/platform.js  → panel del dueño (plataforma.html)
  * Uso: node scripts/build-frontend.mjs [--watch]
  */
 import * as esbuild from 'esbuild';
@@ -7,9 +9,10 @@ import * as esbuild from 'esbuild';
 const isWatchMode = process.argv.includes('--watch');
 
 const options = {
-  entryPoints: ['frontend/main.ts'],
+  // Dos aplicaciones independientes: la de los consultorios y el panel del dueño.
+  entryPoints: { app: 'frontend/main.ts', platform: 'frontend/platform/main.ts' },
   outdir: 'public/assets',
-  entryNames: 'app',
+  entryNames: '[name]',
   chunkNames: 'chunk-[hash]',
   splitting: true,
   bundle: true,

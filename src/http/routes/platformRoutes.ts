@@ -1,8 +1,9 @@
 /**
  * Rutas de plataforma (solo para ti, el dueño del software):
- * • Ingreso con la clave PLATFORM_ADMIN_KEY → sesión segura (cookie HttpOnly,
- *   SameSite=Strict, 8 horas). La clave también se acepta en la cabecera
- *   X-Platform-Key (automatizaciones).
+ * • Ingreso con correo + contraseña (+ código de app autenticadora opcional).
+ *   La clave maestra PLATFORM_ADMIN_KEY solo crea la primera cuenta y
+ *   recupera el acceso; también se acepta en la cabecera X-Platform-Key
+ *   para automatizaciones.
  * • Panel: consultorios reales y demos, suscripciones, pagos, restablecer la
  *   clave del administrador, configuración de cobro y registro de auditoría.
  */
@@ -11,8 +12,8 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 import { seedDemoData } from '../../modules/platform/demoDataService.js';
 import { SUBSCRIPTION_PAYMENT_METHODS } from '../../modules/platform/platformService.js';
-import { constantTimeEqualText, generateSecureToken } from '../../security/crypto.js';
-import { RATE_LIMIT_RULES } from '../../security/rateLimiter.js';
+import { generateSecureToken } from '../../security/crypto.js';
+import type { PlatformAdmin } from '../../modules/platform/platformAuthService.js';
 import type { AppContext, AppEnv } from '../context.js';
 import { AppError } from '../errors.js';
 import { defineRoutes, publicAccess } from '../routeRegistry.js';
@@ -20,7 +21,6 @@ import { hexColorSchema, httpsUrlSchema, localDateSchema, moneySchema, optionalT
 import { PASSWORD_POLICY } from './authRoutes.js';
 
 export const PLATFORM_KEY_HEADER = 'X-Platform-Key';
-const MIN_PLATFORM_KEY_LENGTH = 24;
 
 const platformCookieName = (url: string) => (new URL(url).protocol === 'https:' ? '__Host-psid' : 'psid');
 
@@ -34,15 +34,44 @@ const clinicBaseSchema = z.object({
 
 export function registerPlatformRoutes(app: Hono<AppEnv>): void {
   defineRoutes(app, [
-    // ─── Sesión ───
+    // ─── Cuenta y sesión del dueño ───
+    {
+      method: 'GET',
+      path: '/api/platform/session',
+      access: publicAccess,
+      handler: async (context) => {
+        const platformAuth = context.get('services').platformAuth;
+        const admin = await platformAuth.resolveSession(getCookie(context, platformCookieName(context.req.url)));
+        return context.json({ authenticated: Boolean(admin), admin, needsSetup: !admin && !(await platformAuth.hasAdmins()) });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/platform/setup',
+      access: publicAccess,
+      handler: async (context) => {
+        const input = await readJsonBody(
+          context,
+          z.object({ masterKey: z.string().max(300), fullName: requiredText(120, 'Tu nombre'), email: z.email('Correo inválido.').max(200), password: PASSWORD_POLICY }),
+        );
+        await context.get('services').platformAuth.setupFirstAdmin(input, context.get('clientIp'));
+        return context.json({ ok: true }, 201);
+      },
+    },
     {
       method: 'POST',
       path: '/api/platform/login',
       access: publicAccess,
       handler: async (context) => {
-        const { key } = await readJsonBody(context, z.object({ key: z.string().max(300) }));
-        await assertKey(context, key);
-        const { token, expiresAt } = await context.get('services').platform.createSession(context.get('clientIp'));
+        const input = await readJsonBody(
+          context,
+          z.object({
+            email: z.string().trim().max(200),
+            password: z.string().max(200),
+            code: z.string().trim().regex(/^\d{6}$/, 'El código tiene 6 dígitos.').nullable().default(null),
+          }),
+        );
+        const { token, expiresAt, admin } = await context.get('services').platformAuth.login(input, context.get('clientIp'));
         setCookie(context, platformCookieName(context.req.url), token, {
           httpOnly: true,
           secure: new URL(context.req.url).protocol === 'https:',
@@ -50,7 +79,17 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
           path: '/',
           expires: new Date(expiresAt),
         });
-        return context.json({ ok: true, expiresAt });
+        return context.json({ ok: true, admin });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/platform/recover',
+      access: publicAccess,
+      handler: async (context) => {
+        const input = await readJsonBody(context, z.object({ masterKey: z.string().max(300), email: z.email('Correo inválido.').max(200), newPassword: PASSWORD_POLICY }));
+        await context.get('services').platformAuth.recoverAccess(input, context.get('clientIp'));
+        return context.json({ ok: true });
       },
     },
     {
@@ -59,17 +98,84 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       access: publicAccess,
       handler: async (context) => {
         const cookieName = platformCookieName(context.req.url);
-        await context.get('services').platform.destroySession(getCookie(context, cookieName));
+        await context.get('services').platformAuth.logout(getCookie(context, cookieName));
         deleteCookie(context, cookieName, { path: '/', secure: cookieName.startsWith('__Host-') });
         return context.json({ ok: true });
       },
     },
     {
-      method: 'GET',
-      path: '/api/platform/session',
+      method: 'POST',
+      path: '/api/platform/account/password',
       access: publicAccess,
-      handler: async (context) =>
-        context.json({ authenticated: await context.get('services').platform.isValidSession(getCookie(context, platformCookieName(context.req.url))) }),
+      handler: async (context) => {
+        const admin = await requirePlatformAdmin(context);
+        const input = await readJsonBody(context, z.object({ currentPassword: z.string().max(200), newPassword: PASSWORD_POLICY }));
+        await context
+          .get('services')
+          .platformAuth.changePassword(admin.id, input.currentPassword, input.newPassword, getCookie(context, platformCookieName(context.req.url)), context.get('clientIp'));
+        return context.json({ ok: true });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/platform/account/2fa/start',
+      access: publicAccess,
+      handler: async (context) => {
+        const admin = await requirePlatformAdmin(context);
+        return context.json(await context.get('services').platformAuth.startTwoFactor(admin.id));
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/platform/account/2fa/confirm',
+      access: publicAccess,
+      handler: async (context) => {
+        const admin = await requirePlatformAdmin(context);
+        const { code } = await readJsonBody(context, z.object({ code: z.string().trim().regex(/^\d{6}$/, 'El código tiene 6 dígitos.') }));
+        await context.get('services').platformAuth.confirmTwoFactor(admin.id, code, context.get('clientIp'));
+        return context.json({ ok: true });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/platform/account/2fa/disable',
+      access: publicAccess,
+      handler: async (context) => {
+        const admin = await requirePlatformAdmin(context);
+        const { password } = await readJsonBody(context, z.object({ password: z.string().max(200) }));
+        await context.get('services').platformAuth.disableTwoFactor(admin.id, password, context.get('clientIp'));
+        return context.json({ ok: true });
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/platform/admins',
+      access: publicAccess,
+      handler: async (context) => {
+        await requirePlatformAdmin(context);
+        return context.json(await context.get('services').platformAuth.listAdmins());
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/platform/admins',
+      access: publicAccess,
+      handler: async (context) => {
+        await requirePlatformAdmin(context);
+        const input = await readJsonBody(context, z.object({ fullName: requiredText(120, 'El nombre'), email: z.email('Correo inválido.').max(200), password: PASSWORD_POLICY }));
+        return context.json(await context.get('services').platformAuth.createAdmin(input, context.get('clientIp')), 201);
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/api/platform/admins/:id/active',
+      access: publicAccess,
+      handler: async (context) => {
+        const admin = await requirePlatformAdmin(context);
+        const { isActive } = await readJsonBody(context, z.object({ isActive: z.boolean() }));
+        await context.get('services').platformAuth.setAdminActive(admin.id, readIdParam(context), isActive, context.get('clientIp'));
+        return context.json({ ok: true });
+      },
     },
 
     // ─── Panel ───
@@ -274,23 +380,21 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
   ]);
 }
 
-/** Compara la clave en tiempo constante, con límite de intentos por IP. */
-async function assertKey(context: AppContext, providedKey: string): Promise<void> {
-  await context.get('services').rateLimiter.consume(`platform:${context.get('clientIp')}`, RATE_LIMIT_RULES.platformPerIp);
-  const configuredKey = context.get('config').platformAdminKey;
-  if (configuredKey.length < MIN_PLATFORM_KEY_LENGTH) {
-    throw new AppError('La plataforma no está habilitada en este servidor.', 403, 'PLATFORM_DISABLED');
-  }
-  if (!(await constantTimeEqualText(providedKey, configuredKey))) {
-    throw new AppError('Clave de plataforma incorrecta.', 403, 'PLATFORM_FORBIDDEN');
-  }
+/** Exige una sesión de dueño válida (cookie). */
+async function requirePlatformAdmin(context: AppContext): Promise<PlatformAdmin> {
+  const admin = await context.get('services').platformAuth.resolveSession(getCookie(context, platformCookieName(context.req.url)));
+  if (!admin) throw new AppError('Ingresa a la plataforma con tu correo y contraseña.', 401, 'PLATFORM_LOGIN_REQUIRED');
+  return admin;
 }
 
-/** Acceso de plataforma: sesión válida (cookie) o clave en la cabecera. */
+/**
+ * Acceso a las operaciones del panel: sesión de dueño, o la clave maestra en
+ * la cabecera X-Platform-Key (solo para automatizaciones y scripts).
+ */
 async function assertPlatform(context: AppContext): Promise<void> {
-  const platform = context.get('services').platform;
-  if (await platform.isValidSession(getCookie(context, platformCookieName(context.req.url)))) return;
+  const platformAuth = context.get('services').platformAuth;
+  if (await platformAuth.resolveSession(getCookie(context, platformCookieName(context.req.url)))) return;
   const headerKey = context.req.header(PLATFORM_KEY_HEADER);
-  if (headerKey !== undefined) return assertKey(context, headerKey);
-  throw new AppError('Ingresa a la plataforma con tu clave.', 401, 'PLATFORM_LOGIN_REQUIRED');
+  if (headerKey !== undefined) return platformAuth.assertMasterKey(headerKey, context.get('clientIp'));
+  throw new AppError('Ingresa a la plataforma con tu correo y contraseña.', 401, 'PLATFORM_LOGIN_REQUIRED');
 }

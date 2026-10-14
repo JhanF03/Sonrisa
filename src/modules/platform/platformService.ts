@@ -13,7 +13,7 @@
 import type { SqlDatabase } from '../../db/database.js';
 import type { AppConfig, TenantRow } from '../../http/context.js';
 import { AppError, notFound } from '../../http/errors.js';
-import { generateSecureToken, sha256Hex } from '../../security/crypto.js';
+import { generateSecureToken } from '../../security/crypto.js';
 import { decryptSecret, encryptSecret, maskSecret } from '../../security/secretBox.js';
 import {
   addDaysToDate,
@@ -34,7 +34,6 @@ import {
   type WompiEvent,
 } from '../payments/wompiClient.js';
 
-const PLATFORM_SESSION_HOURS = 8;
 const COLOMBIA_OFFSET = -300;
 const SUBSCRIPTION_REFERENCE_PREFIX = 'SUB-';
 
@@ -118,33 +117,6 @@ export class PlatformService {
     private readonly auth: AuthService,
     private readonly wompi: WompiApi,
   ) {}
-
-  // ─── Sesión del dueño ─────────────────────────────────────────────────────
-
-  async createSession(ip: string): Promise<{ token: string; expiresAt: string }> {
-    const token = generateSecureToken(32);
-    const expiresAt = new Date(Date.now() + PLATFORM_SESSION_HOURS * 3_600_000).toISOString();
-    await this.db.batch([
-      this.db.prepare('DELETE FROM platform_sessions WHERE expires_at < ?').bind(isoNow()),
-      this.db.prepare('INSERT INTO platform_sessions (token_hash, ip, created_at, expires_at) VALUES (?, ?, ?, ?)').bind(await sha256Hex(token), ip, isoNow(), expiresAt),
-      this.auditStatement('ingreso_plataforma', null, null, ip),
-    ]);
-    return { token, expiresAt };
-  }
-
-  async isValidSession(token: string | undefined): Promise<boolean> {
-    if (!token || token.length > 100) return false;
-    const row = await this.db
-      .prepare('SELECT 1 AS ok FROM platform_sessions WHERE token_hash = ? AND expires_at > ?')
-      .bind(await sha256Hex(token), isoNow())
-      .first<{ ok: number }>();
-    return Boolean(row);
-  }
-
-  async destroySession(token: string | undefined): Promise<void> {
-    if (!token) return;
-    await this.db.prepare('DELETE FROM platform_sessions WHERE token_hash = ?').bind(await sha256Hex(token)).run();
-  }
 
   private auditStatement(action: string, tenantId: string | null, details: unknown, ip: string | null) {
     return this.db

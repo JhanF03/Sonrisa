@@ -23,6 +23,7 @@
     "better-sqlite3": "^13.0.3",
     "hono": "^4.13.13",
     "lucide": "^1.55.0",
+    "qrcode-generator": "^2.0.4",
     "write-excel-file": "^4.1.1",
     "zod": "^4.6.7"
   },

@@ -70,7 +70,10 @@ console.log(`… Iniciando servidor web en el puerto ${port}`);
 const app = createApp(database, config);
 const publicDirectory = path.relative(projectRoot, path.join(projectRoot, 'public'));
 const indexHtml = readFileSync(path.join(projectRoot, 'public', 'index.html'), 'utf8');
+const platformHtml = readFileSync(path.join(projectRoot, 'public', 'plataforma.html'), 'utf8');
 
+// Panel del dueño: aplicación aparte (igual que en Cloudflare, /plataforma → plataforma.html).
+app.get('/plataforma', (context) => context.html(platformHtml));
 app.use('/*', serveStatic({ root: publicDirectory }));
 // Rutas de la aplicación de una sola página (/app, /c/consultorio, /ingresar…).
 app.get('*', (context) => (context.req.path.startsWith('/api/') ? context.notFound() : context.html(indexHtml)));
@@ -84,7 +87,7 @@ setInterval(() => {
 serve({ fetch: app.fetch, port }, () => {
   console.log(`\n🦷 Agenda Sonrisa lista en http://localhost:${port}`);
   console.log(`   Panel:          http://localhost:${port}/app`);
-  console.log(`   Modo vitrina:   http://localhost:${port}/plataforma  (clave: PLATFORM_ADMIN_KEY en .env)`);
+  console.log(`   Plataforma:     http://localhost:${port}/plataforma  (la primera vez: clave PLATFORM_ADMIN_KEY de .env)`);
 });
 
 async function createDemoClinicIfEmpty(): Promise<void> {

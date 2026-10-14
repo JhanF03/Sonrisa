@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { before, describe, it } from 'node:test';
 import { addMonthsToDate, computeSubscription, extendPaidUntil } from '../src/shared/subscription.js';
 import { addDays, todayLocal } from '../src/utils/time.js';
+import { currentTotpStep, totpCode } from '../src/security/totp.js';
 import { createTestEnvironment, PLATFORM_KEY, TEST_PASSWORD } from './helpers.js';
 
 type TestEnvironment = Awaited<ReturnType<typeof createTestEnvironment>>;
@@ -36,6 +37,15 @@ describe('Reglas de la suscripción', () => {
     assert.equal(addMonthsToDate('2027-12-15', 1), '2028-01-15');
     assert.equal(extendPaidUntil('2026-12-10', '2026-11-20', 1), '2027-01-10', 'Al día: suma desde el vencimiento');
     assert.equal(extendPaidUntil('2026-10-01', '2026-11-20', 1), '2026-12-19', 'Vencido: un mes desde hoy');
+  });
+});
+
+describe('Códigos de verificación (TOTP)', () => {
+  it('reproduce los vectores oficiales del RFC 6238', async () => {
+    const secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'; // "12345678901234567890"
+    assert.equal(await totpCode(secret, Math.floor(59 / 30)), '287082');
+    assert.equal(await totpCode(secret, Math.floor(1111111109 / 30)), '081804');
+    assert.equal(await totpCode(secret, Math.floor(2000000000 / 30)), '279037');
   });
 });
 
@@ -78,18 +88,67 @@ describe('Plataforma y suscripciones (API)', () => {
     env = await createTestEnvironment({ fetch: fakeFetch });
   });
 
-  it('el dueño ingresa con su clave y obtiene una sesión segura', async () => {
+  it('crea la cuenta del dueño una sola vez con la clave maestra e ingresa con correo y contraseña', async () => {
     assert.equal((await env.request('GET', '/api/platform/tenants')).status, 401);
-    const wrong = await env.request('POST', '/api/platform/login', { body: { key: 'incorrecta' }, headers: { 'X-Real-IP': 'dueno-1' } });
-    assert.equal(wrong.status, 403);
-    const login = await env.request('POST', '/api/platform/login', { body: { key: PLATFORM_KEY }, headers: { 'X-Real-IP': 'dueno-2' } });
-    assert.equal(login.status, 200);
+    assert.equal((await env.request('GET', '/api/platform/session')).json.needsSetup, true);
+
+    const badKey = await env.request('POST', '/api/platform/setup', { body: { masterKey: 'incorrecta', fullName: 'Jhan', email: 'dueno@agenda.co', password: TEST_PASSWORD }, headers: { 'X-Real-IP': 'setup-1' } });
+    assert.equal(badKey.status, 403);
+    const setup = await env.request('POST', '/api/platform/setup', { body: { masterKey: PLATFORM_KEY, fullName: 'Jhan', email: 'dueno@agenda.co', password: TEST_PASSWORD }, headers: { 'X-Real-IP': 'setup-2' } });
+    assert.equal(setup.status, 201, setup.text);
+    const again = await env.request('POST', '/api/platform/setup', { body: { masterKey: PLATFORM_KEY, fullName: 'Otro', email: 'otro@agenda.co', password: TEST_PASSWORD }, headers: { 'X-Real-IP': 'setup-3' } });
+    assert.equal(again.status, 409, 'Solo la primera cuenta se crea con la clave');
+
+    const wrongPassword = await env.request('POST', '/api/platform/login', { body: { email: 'dueno@agenda.co', password: 'Incorrecta123' }, headers: { 'X-Real-IP': 'dueno-1' } });
+    const unknownUser = await env.request('POST', '/api/platform/login', { body: { email: 'nadie@agenda.co', password: 'Incorrecta123' }, headers: { 'X-Real-IP': 'dueno-1' } });
+    assert.equal(wrongPassword.status, 401);
+    assert.equal(wrongPassword.json.error.message, unknownUser.json.error.message, 'Mismo mensaje: no revela qué correos existen');
+
+    const login = await env.request('POST', '/api/platform/login', { body: { email: 'DUENO@agenda.co', password: TEST_PASSWORD }, headers: { 'X-Real-IP': 'dueno-2' } });
+    assert.equal(login.status, 200, login.text);
     const setCookie = login.headers.get('set-cookie') ?? '';
     assert.match(setCookie, /HttpOnly/i);
     assert.match(setCookie, /SameSite=Strict/i);
     platformCookie = setCookie.split(';')[0] ?? '';
-    assert.equal((await platform('GET', '/api/platform/session')).json.authenticated, true);
+    const session = (await platform('GET', '/api/platform/session')).json;
+    assert.equal(session.authenticated, true);
+    assert.equal(session.admin.email, 'dueno@agenda.co');
     assert.equal((await platform('GET', '/api/platform/tenants')).status, 200);
+  });
+
+  it('verificación en dos pasos: exige el código y no permite reutilizarlo', async () => {
+    const start = await platform('POST', '/api/platform/account/2fa/start');
+    assert.match(start.json.otpauthUrl, /^otpauth:\/\/totp\/Agenda%20Sonrisa%3Adueno%40agenda\.co\?secret=/);
+    const step = currentTotpStep();
+    assert.equal((await platform('POST', '/api/platform/account/2fa/confirm', { code: '000000' })).status, 422);
+    const confirm = await platform('POST', '/api/platform/account/2fa/confirm', { code: await totpCode(start.json.secret, step) });
+    assert.equal(confirm.status, 200, confirm.text);
+
+    const withoutCode = await env.request('POST', '/api/platform/login', { body: { email: 'dueno@agenda.co', password: TEST_PASSWORD }, headers: { 'X-Real-IP': 'dueno-3' } });
+    assert.equal(withoutCode.json.error.code, 'TOTP_REQUIRED');
+    const reused = await env.request('POST', '/api/platform/login', { body: { email: 'dueno@agenda.co', password: TEST_PASSWORD, code: await totpCode(start.json.secret, step) }, headers: { 'X-Real-IP': 'dueno-3' } });
+    assert.equal(reused.json.error.code, 'TOTP_INVALID', 'Un código ya usado no sirve');
+    const fresh = await env.request('POST', '/api/platform/login', { body: { email: 'dueno@agenda.co', password: TEST_PASSWORD, code: await totpCode(start.json.secret, step + 1) }, headers: { 'X-Real-IP': 'dueno-3' } });
+    assert.equal(fresh.status, 200, fresh.text);
+  });
+
+  it('recupera el acceso con la clave maestra (quita la verificación en dos pasos)', async () => {
+    const recovered = await env.request('POST', '/api/platform/recover', { body: { masterKey: PLATFORM_KEY, email: 'dueno@agenda.co', newPassword: 'NuevaClave2026' }, headers: { 'X-Real-IP': 'recover-1' } });
+    assert.equal(recovered.status, 200, recovered.text);
+    assert.equal((await platform('GET', '/api/platform/session')).json.authenticated, false, 'Cierra las sesiones anteriores');
+    const login = await env.request('POST', '/api/platform/login', { body: { email: 'dueno@agenda.co', password: 'NuevaClave2026' }, headers: { 'X-Real-IP': 'dueno-4' } });
+    assert.equal(login.status, 200, 'Entra sin código porque se reinició la verificación en dos pasos');
+    platformCookie = (login.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
+  });
+
+  it('gestiona otras cuentas de dueño sin dejar la plataforma sin acceso', async () => {
+    const created = await platform('POST', '/api/platform/admins', { fullName: 'Socia', email: 'socia@agenda.co', password: TEST_PASSWORD });
+    assert.equal(created.status, 201);
+    const me = (await platform('GET', '/api/platform/session')).json.admin;
+    assert.equal((await platform('PUT', `/api/platform/admins/${me.id}/active`, { isActive: false })).status, 409, 'No se desactiva a sí mismo');
+    assert.equal((await platform('PUT', `/api/platform/admins/${created.json.id}/active`, { isActive: false })).status, 200);
+    const socia = await env.request('POST', '/api/platform/login', { body: { email: 'socia@agenda.co', password: TEST_PASSWORD }, headers: { 'X-Real-IP': 'socia-1' } });
+    assert.equal(socia.status, 401, 'Una cuenta desactivada no entra');
   });
 
   it('una sesión de un consultorio no sirve para la plataforma', async () => {

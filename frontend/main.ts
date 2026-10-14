@@ -3,14 +3,13 @@
  *   /c/:consultorio               → reserva pública
  *   /c/:consultorio/cita/:token   → gestión de cita del paciente
  *   /c/:consultorio/pago/:token   → resultado del pago con Wompi
- *   /plataforma                   → modo vitrina (proveedor)
+ *   /plataforma                   → panel del dueño (página aparte: plataforma.html)
  *   /app (y cualquier otra)       → panel del consultorio
  */
 import { startAdminApp } from './admin/shell.js';
 import { renderBookingPage } from './public/booking.js';
 import { renderManagePage } from './public/manage.js';
 import { renderPaymentResultPage } from './public/paymentResult.js';
-import { renderPlatformPage } from './public/platform.js';
 import { renderSubscriptionPaymentReturn } from './admin/subscription.js';
 
 const root = document.getElementById('root') as HTMLElement;
@@ -25,7 +24,8 @@ if (pathSegments[0] === 'c' && pathSegments[1] && pathSegments[2] === 'pago' && 
 } else if (pathSegments[0] === 'suscripcion' && pathSegments[1] === 'pago') {
   void renderSubscriptionPaymentReturn(root);
 } else if (pathSegments[0] === 'plataforma') {
-  renderPlatformPage(root);
+  // El panel del dueño es una aplicación aparte (plataforma.html).
+  window.location.replace('/plataforma.html');
 } else {
   void startAdminApp(root);
 }
