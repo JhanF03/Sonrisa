@@ -7,11 +7,11 @@
  */
 import { api } from '../core/api.js';
 import { logoTooth } from '../core/brand.js';
-import { html, safeUrl, setContent, type SafeHtml } from '../core/dom.js';
+import { $, html, safeUrl, setContent, type SafeHtml } from '../core/dom.js';
 import { addDays, formatLongDate, formatMoney, formatShortDate, formatUtcAsLocal } from '../core/format.js';
 import { openLicenseReceipt, receiptLabel } from '../core/licenseReceipt.js';
 import { planCard, priceSummary } from '../core/planCards.js';
-import { legalLinks } from '../public/legal.js';
+import { pickSection, sectionLayout, type SectionNavItem } from '../core/sectionNav.js';
 import { taxNotice, type LegalInfo } from '../../src/shared/legal.js';
 import { emptyState, icon, loadingState, refreshIcons, themeToggleButton, toast, withErrorToast } from '../core/ui.js';
 import { SUBSCRIPTION_LABELS, type SubscriptionStatus } from '../../src/shared/subscription.js';
@@ -56,7 +56,7 @@ const stateBadge = (status: SubscriptionStatus, onTrial: boolean) =>
 /** Aviso en la parte superior del panel (null si no hace falta). */
 export function subscriptionBanner(): SafeHtml | null {
   const { subscription } = session();
-  const link = can('suscripcion.pagar') ? html` <a href="#/suscripcion">${subscription.onTrial ? 'Elegir plan y pagar →' : 'Ver cómo pagar →'}</a>` : html` Avísale al administrador del consultorio.`;
+  const link = can('suscripcion.pagar') ? html` <a href="#/suscripcion/pagar">${subscription.onTrial ? 'Elegir plan y pagar →' : 'Ver cómo pagar →'}</a>` : html` Avísale al administrador del consultorio.`;
   if (subscription.state === 'por_vencer' && subscription.paidUntil) {
     return subscription.onTrial
       ? html`<div class="subscription-banner is-warning">${icon('gift')} Tu prueba gratis termina el <strong>${formatLongDate(subscription.paidUntil)}</strong>.${link}</div>`
@@ -192,8 +192,17 @@ function usageMeter(label: string, used: number, max: number): SafeHtml {
     <div class="bar"><span style="width: ${Math.round(ratio * 100)}%"></span></div></div>`;
 }
 
-/** Vista "Mi plan" (#/suscripcion). */
-export async function renderSubscriptionView(container: HTMLElement): Promise<void> {
+type PlanSectionId = 'resumen' | 'cambiar' | 'pagar' | 'pagos' | 'condiciones';
+
+/**
+ * Vista "Mi plan" con submenú lateral:
+ *   #/suscripcion/resumen      estado, fechas y uso de profesionales y usuarios
+ *   #/suscripcion/cambiar      cambiar de plan, módulos y adicionales
+ *   #/suscripcion/pagar        cómo pagar (en línea o transferencia)
+ *   #/suscripcion/pagos        historial con comprobantes
+ *   #/suscripcion/condiciones  precios, IVA, términos y tratamiento de datos
+ */
+export async function renderSubscriptionView(container: HTMLElement, params: string[] = []): Promise<void> {
   setContent(container, loadingState());
   if (session().clinic.isShowcase) {
     await renderDemoPlans(container);
@@ -204,10 +213,32 @@ export async function renderSubscriptionView(container: HTMLElement): Promise<vo
   const currentPlan = view.catalog.plans.find((plan) => plan.id === view.plan.selection.planId);
   const pendingPlan = view.plan.pending ? view.catalog.plans.find((plan) => plan.id === view.plan.pending?.planId) : null;
   const canPay = can('suscripcion.pagar');
+  const isExempt = status.state === 'exento';
+  const needsPayment = ['por_vencer', 'en_gracia', 'suspendido'].includes(status.state) || view.onTrial;
 
-  setContent(
-    container,
-    html`<section class="card">
+  const sections: Array<SectionNavItem & { id: PlanSectionId }> = [
+    { id: 'resumen', label: 'Resumen', iconName: 'layout-dashboard', hint: `${currentPlan?.name ?? 'Plan'} · ${view.onTrial ? 'prueba' : SUBSCRIPTION_LABELS[status.state].toLowerCase()}`,
+      description: 'Estado de tu suscripción, hasta cuándo tienes acceso y cuánto usas de tu plan.' },
+    ...(canPay && !isExempt
+      ? [{ id: 'cambiar' as const, label: 'Cambiar de plan', iconName: 'crown', hint: 'Plan, módulos y adicionales',
+          description: 'Subir de plan estando al día: pagas solo la diferencia de los días que quedan. Bajar: aplica cuando termina lo ya pagado. En prueba o vencido: cambia de inmediato.' }]
+      : []),
+    ...(!isExempt
+      ? [{ id: 'pagar' as const, label: 'Pagar', iconName: 'credit-card', hint: view.onlinePaymentAvailable ? 'En línea o transferencia' : 'Transferencia',
+          description: view.onTrial ? 'Activa tu plan antes de que termine la prueba: el tiempo se suma desde el final de la prueba.' : 'Paga antes del vencimiento para no perder el acceso.',
+          status: needsPayment ? ('pendiente' as const) : null }]
+      : []),
+    { id: 'pagos', label: 'Pagos y comprobantes', iconName: 'receipt', hint: `${view.payments.length} ${view.payments.length === 1 ? 'pago' : 'pagos'}`,
+      description: 'Cada pago con su comprobante: ábrelo para imprimirlo o guardarlo en PDF.' },
+    { id: 'condiciones', label: 'Precios y condiciones', iconName: 'scale', hint: 'IVA, términos y datos',
+      description: 'Cómo se cobran los precios, los términos del servicio y el tratamiento de tus datos.' },
+  ];
+  const active = pickSection(sections, params[0]) as (typeof sections)[number];
+  setContent(container, sectionLayout({ items: sections, active, baseHref: '#/suscripcion', label: 'Secciones de Mi plan' }));
+  const panel = $('[data-section-content]', container);
+
+  const sectionMarkup: Record<PlanSectionId, () => SafeHtml> = {
+    resumen: () => html`<section class="card">
         <div class="card-padded"><div class="kpi-grid">
           <div class="card kpi"><span class="kpi-icon">${icon('shield-check')}</span><div><div class="kpi-value">${stateBadge(status, view.onTrial)}</div><div class="kpi-label">Estado</div></div></div>
           <div class="card kpi"><span class="kpi-icon is-info">${icon('crown')}</span><div><div class="kpi-value" style="font-size: 1.05rem">${currentPlan?.name ?? view.plan.selection.planId}</div><div class="kpi-label">Plan actual</div></div></div>
@@ -224,29 +255,24 @@ export async function renderSubscriptionView(container: HTMLElement): Promise<vo
               ${canPay ? html`<button class="button button-ghost button-small" data-action="cancel-pending">${icon('undo-2')} Cancelar cambio</button>` : ''}</p>`
           : ''}
       </section>
-      ${canPay && status.state !== 'exento'
-        ? html`<section class="card" style="margin-top: 16px">
-            <div class="card-header"><h3>${icon('crown')} Cambiar de plan <span class="hint" data-tooltip="Subir de plan estando al día: pagas solo la diferencia de los días que quedan. Bajar: aplica cuando termina lo ya pagado. En prueba o vencido: cambia de inmediato.">${icon('info')}</span></h3></div>
-            <div class="card-padded" data-plan-builder></div>
-          </section>`
-        : ''}
-      ${status.state === 'exento'
-        ? html`<section class="card card-padded" style="margin-top: 16px"><p class="muted">Este consultorio no tiene cobro de suscripción.</p></section>`
-        : html`<section class="card card-padded" style="margin-top: 16px">
-            <h3>${icon('list-checks')} ${view.onTrial ? 'Activa tu plan antes de que termine la prueba' : 'Cómo pagar'}</h3>
-            <p class="muted">${status.state === 'en_gracia' && status.suspendOn
-              ? html`Está vencido. Tienes hasta el <strong>${formatLongDate(status.suspendOn)}</strong> (periodo de gracia de ${view.graceDays} días) antes de que se suspenda el acceso.`
-              : view.onTrial
-                ? html`Al pagar, el tiempo se suma desde el final de tu prueba: no pierdes días.`
-                : html`Paga antes del vencimiento para no perder el acceso. Si pagas antes, el tiempo se suma a partir de la fecha actual de vencimiento.`}</p>
-            ${stepsMarkup(view)}
-          </section>`}
-      <section class="card card-padded" style="margin-top: 16px; display: grid; gap: 10px">
-        <p class="tax-notice">${icon('scale')}<span>${taxNotice(view.legal)}</span></p>
-        <nav class="legal-links" aria-label="Información legal">${legalLinks(true)}${view.legal.contactEmail ? html`<a href="mailto:${view.legal.contactEmail}">Consultas y reclamos: ${view.legal.contactEmail}</a>` : ''}</nav>
+      ${isExempt
+        ? html`<section class="card card-padded"><p class="muted">Este consultorio no tiene cobro de suscripción.</p></section>`
+        : html`<div class="button-row">
+            ${canPay ? html`<a class="button button-primary" href="#/suscripcion/pagar">${icon('credit-card')} Pagar</a>
+              <a class="button button-secondary" href="#/suscripcion/cambiar">${icon('crown')} Cambiar de plan</a>` : ''}
+            <a class="button button-ghost" href="#/suscripcion/pagos">${icon('receipt')} Ver pagos y comprobantes</a>
+          </div>`}`,
+    cambiar: () => html`<section class="card card-padded" data-plan-builder></section>`,
+    pagar: () => html`<section class="card card-padded">
+        <p class="muted">${status.state === 'en_gracia' && status.suspendOn
+          ? html`Está vencido. Tienes hasta el <strong>${formatLongDate(status.suspendOn)}</strong> (periodo de gracia de ${view.graceDays} días) antes de que se suspenda el acceso.`
+          : view.onTrial
+            ? html`Al pagar, el tiempo se suma desde el final de tu prueba: no pierdes días.`
+            : html`Si pagas antes, el tiempo se suma a partir de la fecha actual de vencimiento.`}</p>
+        ${stepsMarkup(view)}
       </section>
-      <section class="card" style="margin-top: 16px">
-        <div class="card-header"><h3>${icon('receipt')} Historial de pagos</h3></div>
+      <p class="tax-notice">${icon('scale')}<span>${taxNotice(view.legal)}</span></p>`,
+    pagos: () => html`<section class="card">
         ${view.payments.length === 0
           ? emptyState('receipt', 'Sin pagos registrados', 'Aquí verás cada pago de la suscripción y hasta qué fecha cubrió.')
           : html`<div class="table-wrapper"><table class="data-table">
@@ -262,10 +288,23 @@ export async function renderSubscriptionView(container: HTMLElement): Promise<vo
               <td>${payment.status === 'aprobado' ? html`<span class="badge badge-success">Aprobado</span>` : html`<span class="badge badge-neutral">Anulado</span>`}</td>
             </tr>`)}</tbody></table></div>`}
       </section>`,
-  );
+    condiciones: () => html`<section class="card card-padded" style="display: grid; gap: 14px">
+        <p class="tax-notice">${icon('scale')}<span>${taxNotice(view.legal)}</span></p>
+        <dl class="detail-list">
+          <dt>Presta el servicio</dt><dd>${view.legal.providerName || 'Agenda Sonrisa'}${view.legal.providerId ? ` · ${view.legal.providerId}` : ''}${view.legal.city ? ` · ${view.legal.city}` : ''}</dd>
+          ${view.legal.contactEmail ? html`<dt>Consultas y reclamos</dt><dd><a href="mailto:${view.legal.contactEmail}">${view.legal.contactEmail}</a></dd>` : ''}
+          <dt>Versión de los términos</dt><dd>${formatLongDate(view.legal.termsVersion)}</dd>
+        </dl>
+        <div class="button-row">
+          <a class="button button-secondary" href="/legal/terminos" target="_blank" rel="noopener">${icon('gavel')} Términos del servicio</a>
+          <a class="button button-secondary" href="/legal/privacidad" target="_blank" rel="noopener">${icon('shield-check')} Tratamiento de datos</a>
+        </div>
+      </section>`,
+  };
+  setContent(panel, sectionMarkup[active.id]());
   refreshIcons(container);
   const builder = container.querySelector<HTMLElement>('[data-plan-builder]');
-  if (builder) mountPlanBuilder(builder, view, () => renderSubscriptionView(container));
+  if (builder) mountPlanBuilder(builder, view, () => renderSubscriptionView(container, [active.id]));
   container.onclick = async (event) => {
     const target = event.target as HTMLElement;
     const receiptId = target.closest<HTMLElement>('[data-receipt]')?.dataset.receipt;
@@ -276,7 +315,7 @@ export async function renderSubscriptionView(container: HTMLElement): Promise<vo
       const done = await withErrorToast(() => api.post('/api/subscription/plan', view.plan.selection));
       if (done) {
         toast('Cambio programado cancelado.', 'info');
-        await renderSubscriptionView(container);
+        await renderSubscriptionView(container, [active.id]);
       }
     }
   };

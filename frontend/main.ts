@@ -15,8 +15,10 @@ import { renderPaymentResultPage } from './public/paymentResult.js';
 import { renderLegalPage } from './public/legal.js';
 import { renderSignupPage } from './public/signup.js';
 import { renderSubscriptionPaymentReturn } from './admin/subscription.js';
+import { initTooltips } from './core/tooltip.js';
 
 const root = document.getElementById('root') as HTMLElement;
+initTooltips();
 const pathSegments = window.location.pathname.split('/').filter(Boolean).map(decodeURIComponent);
 
 if (pathSegments[0] === 'c' && pathSegments[1] && pathSegments[2] === 'pago' && pathSegments[3]) {

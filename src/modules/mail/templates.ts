@@ -127,7 +127,7 @@ export function reminderEmail(input: {
       p(bodies[input.kind]) +
       (input.monthlyPrice ? p(`Valor del plan: <strong>${escapeHtml(money(input.monthlyPrice))}</strong> al mes. Puedes pagar mensual o anual con tarjeta, PSE o Nequi; el acceso se activa al instante.`) : ''),
     text: `${headings[input.kind]}. ${bodies[input.kind].replace(/<[^>]+>/g, '')} Paga desde Mi plan.`,
-    button: { label: 'Pagar desde Mi plan', url: `${input.baseUrl}/app#/suscripcion` },
+    button: { label: 'Pagar desde Mi plan', url: `${input.baseUrl}/app#/suscripcion/pagar` },
   });
 }
 
@@ -177,7 +177,7 @@ ${row('Recibido por', escapeHtml(`${provider.providerName || 'Agenda Sonrisa'}${
       `<p style="margin:0 0 8px;font-size:12.5px;line-height:1.5;color:${MUTED}">${escapeHtml(receiptNote(provider))}</p>` +
       `<p style="margin:0;font-size:12.5px;line-height:1.5;color:${MUTED}">${escapeHtml(taxNotice(provider))}</p>`,
     text: `Comprobante de pago ${receiptNumberLabel(receipt.number)}\nFecha: ${date}\nRecibido de: ${receipt.customer.clinicName}\nConcepto: ${receipt.concept}\nCubre hasta: ${longDate(receipt.paidUntil)}\nValor: ${money(receipt.amount)}\n${receiptNote(provider)}`,
-    button: { label: 'Ver mis pagos', url: `${input.baseUrl}/app#/suscripcion` },
+    button: { label: 'Ver mis pagos', url: `${input.baseUrl}/app#/suscripcion/pagos` },
   });
 }
 

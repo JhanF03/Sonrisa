@@ -143,7 +143,7 @@ function renderShell(): void {
           ${icon(item.iconName)}<span>${item.label}</span></a>`,
       ),
       ...locked.map(
-        (item) => html`<a class="nav-link is-locked" href="${can('suscripcion.pagar') ? '#/suscripcion' : '#'}" data-locked="${item.path}" data-tooltip="${upgradeHint}" data-tooltip-position="right">
+        (item) => html`<a class="nav-link is-locked" href="${can('suscripcion.pagar') ? '#/suscripcion/cambiar' : '#'}" data-locked="${item.path}" data-tooltip="${upgradeHint}" data-tooltip-position="right">
           ${icon(item.iconName)}<span>${item.label}</span><span class="lock-mark">${icon('lock')}</span></a>`,
       ),
     ];

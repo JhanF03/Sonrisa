@@ -534,9 +534,8 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     tour: [
-      { target: KPIS, title: 'Estado', body: 'Estado, fecha hasta la que está pago y valor mensual.' },
-      { target: ['.plan-options', '.steps-list'], title: 'Cómo pagar', body: 'Elige los meses para pagar en línea o sigue las instrucciones de transferencia.', optional: true },
-      { target: TABLE, title: 'Historial', body: 'Cada pago y hasta qué fecha cubrió.', optional: true },
+      { target: '.section-nav', title: 'Secciones', body: 'Resumen, cambiar de plan, pagar, pagos con sus comprobantes y las condiciones del servicio.' },
+      { target: KPIS, title: 'Estado', body: 'Estado, fecha hasta la que está pago y valor mensual.', optional: true },
     ],
   },
   {

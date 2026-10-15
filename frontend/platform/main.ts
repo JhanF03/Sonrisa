@@ -20,6 +20,7 @@ import { renderEmailLogView } from './views/emailLogView.js';
 import { renderPlansView } from './views/plansView.js';
 import { renderSettingsView } from './views/settingsView.js';
 import { renderSummaryView } from './views/summaryView.js';
+import { initTooltips } from '../core/tooltip.js';
 
 interface SessionState {
   authenticated: boolean;
@@ -41,6 +42,7 @@ const VIEWS = [
 type ViewId = (typeof VIEWS)[number]['id'];
 
 const root = document.getElementById('root') as HTMLElement;
+initTooltips();
 document.title = 'Plataforma · Agenda Sonrisa';
 
 const currentRoute = () => window.location.hash.replace(/^#\/?/, '').split('/')[0] ?? '';
@@ -82,7 +84,7 @@ async function renderPanel(admin: PlatformAdmin): Promise<void> {
     else if (viewId === 'consultorios') await renderClinicsView(content, reload, false);
     else if (viewId === 'demos') await renderClinicsView(content, reload, true);
     else if (viewId === 'crear') await renderCreateView(content);
-    else if (viewId === 'planes') await renderPlansView(content);
+    else if (viewId === 'planes') await renderPlansView(content, routeParams());
     else if (viewId === 'configuracion') await renderSettingsView(content, reload, routeParams());
     else if (viewId === 'correos') await renderEmailLogView(content);
     else if (viewId === 'auditoria') await renderAuditView(content);
