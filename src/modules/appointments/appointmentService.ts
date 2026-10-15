@@ -343,10 +343,12 @@ export class AppointmentService {
 
   async markReminderSent(actor: Actor, appointmentId: string): Promise<void> {
     await this.getById(actor.tenantId, appointmentId);
-    await this.db
-      .prepare('UPDATE appointments SET reminder_sent_at = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
-      .bind(isoNow(), isoNow(), appointmentId, actor.tenantId)
-      .run();
+    await this.db.batch([
+      this.db
+        .prepare('UPDATE appointments SET reminder_sent_at = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
+        .bind(isoNow(), isoNow(), appointmentId, actor.tenantId),
+      this.audit.buildStatement(actor, { action: 'recordatorio_enviado', entity: 'cita', entityId: appointmentId }),
+    ]);
   }
 
   /**

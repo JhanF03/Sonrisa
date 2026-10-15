@@ -5,6 +5,7 @@ import { api } from '../../core/api.js';
 import { $, emptyToNull, html, readForm, safeUrl, setContent } from '../../core/dom.js';
 import { formatMoney, formatShortDate } from '../../core/format.js';
 import { copyToClipboard, icon, refreshIcons } from '../../core/ui.js';
+import { bindFaviconFields, faviconField } from '../../core/favicon.js';
 import { addDaysToDate } from '../../../src/shared/subscription.js';
 import { type PlatformSettings } from '../types.js';
 import type { PlanCatalog } from '../../../src/shared/plans.js';
@@ -25,6 +26,7 @@ export async function renderCreateView(content: HTMLElement): Promise<void> {
           <label class="field"><span>Teléfono</span><input name="phone" maxlength="30" /></label>
           <label class="field"><span>${icon('palette')} Color</span><input name="brandColor" type="color" value="#2742a8" /></label>
           <label class="field"><span>Logo (URL https)</span><input name="logoUrl" type="url" placeholder="https://…" /></label>
+          ${faviconField()}
         </div>
         <div class="form-grid" data-demo-fields>
           <label class="field"><span>Vence <span class="hint" data-tooltip="Al vencer, la demo y sus datos ficticios se borran solos. Permanente: para tus presentaciones; bórrala tú cuando no la necesites.">${icon('info')}</span></span><select name="expiresInDays">
@@ -50,6 +52,11 @@ export async function renderCreateView(content: HTMLElement): Promise<void> {
   const form = content.querySelector('form') as HTMLFormElement;
   const resultElement = $('[data-result]', content);
   const errorElement = $('.form-error', form);
+  bindFaviconFields(form);
+  form.addEventListener('favicon-error', (event) => {
+    errorElement.textContent = (event as CustomEvent<string>).detail;
+    errorElement.hidden = false;
+  });
   form.addEventListener('change', () => {
     $('[data-real-fields]', form).hidden = readForm(form).kind !== 'real';
     $('[data-demo-fields]', form).hidden = readForm(form).kind === 'real';
@@ -65,6 +72,7 @@ export async function renderCreateView(content: HTMLElement): Promise<void> {
       phone: emptyToNull(values.phone),
       brandColor: values.brandColor,
       logoUrl: emptyToNull(values.logoUrl),
+      favicon: values.favicon || null,
       ...(isReal
         ? {
             adminFullName: values.adminFullName,

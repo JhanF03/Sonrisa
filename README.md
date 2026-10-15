@@ -200,6 +200,15 @@ Los permisos están en `src/security/permissions.ts`. Roles iniciales: **Adminis
 3. Al crear un consultorio real eliges su plan (o un precio especial) y hasta qué fecha tiene acceso (prueba). Los que se registran solos en `/registro` ya llegan con su plan y su prueba.
 4. Cuando te paguen por transferencia: **Consultorios → Pago**. El acceso se reactiva de inmediato.
 
+### Que todo funcione sin ti (correo, comprobantes y textos legales)
+
+1. **Correo con tu Gmail (gratis, ~500 correos/día):** activa la verificación en 2 pasos de Google, crea una contraseña de aplicación en <https://myaccount.google.com/apppasswords> y pégala en **Plataforma → Configuración → Correo automático**. Pulsa *Enviar correo de prueba*.
+   Desde ahí salen solos: bienvenida al registrarse, datos de la demo, **comprobante de pago numerado** después de cada pago (Wompi o manual), recordatorios 5 días antes, el día anterior, al vencer y al suspenderse, aviso de demo por terminar y el enlace de "¿Olvidaste tu contraseña?". Cada envío queda en la pestaña **Correos**.
+2. **Datos legales y tributarios** (misma pantalla): nombre, cédula/NIT, ciudad, correo de contacto, régimen de IVA, UVT del año y la dirección pública del sistema. Se publican en `/legal/terminos`, `/legal/privacidad`, el pie de `/registro`, **Mi plan** de cada consultorio y los comprobantes.
+3. **Tope de IVA:** el **Resumen** muestra lo cobrado en el año frente a 3.500 UVT (persona natural no responsable de IVA). Si te acercas, habla con un contador.
+
+En Cloudflare los recordatorios corren con el segundo Cron Trigger (`7 * * * *`) para no gastar el cupo de 50 consultas a D1 por ejecución del plan gratuito.
+
 ## 💳 Activar pagos con Wompi (por consultorio)
 
 1. Aplica la migración nueva: `npm run cf:migrate:remote` (en Node se aplica sola al iniciar).
@@ -217,6 +226,7 @@ La llave privada de Wompi **no** se usa ni se guarda; los secretos quedan cifrad
 - **WhatsApp:** los mensajes se envían con un clic (sin costo). El envío 100 % automático requiere la API oficial, que es paga.
 - **Fuera de alcance:** historia clínica (regulación especial) y facturación electrónica DIAN (fase 3, mediante el proveedor del consultorio).
 - Los recibos de caja son soporte de recaudo; no reemplazan la factura electrónica cuando sea exigible.
+- Los comprobantes de la licencia **no son factura electrónica**: sirven mientras quien vende sea persona natural no responsable de IVA. Los textos legales son una base; conviene que un abogado los revise.
 
 ## 🗺️ Siguientes fases
 - ✅ **Fase 2:** proveedores, compras con XML DIAN, cuentas por pagar, inventario y costo por servicio.

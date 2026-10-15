@@ -8,6 +8,7 @@ import { getColombianHolidays } from '../../utils/colombianHolidays.js';
 import { actorOf, requireAuth, type AppEnv } from '../context.js';
 import { authenticatedAccess, defineRoutes, requiresAny } from '../routeRegistry.js';
 import {
+  faviconSchema,
   hexColorSchema,
   httpsUrlSchema,
   idSchema,
@@ -99,6 +100,15 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
       handler: async (context) => {
         const input = await readJsonBody(context, tenantSettingsSchema);
         return context.json(await context.get('services').tenants.updateSettings(actorOf(context), input));
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/api/settings/favicon',
+      access: requiresAny('configuracion.consultorio'),
+      handler: async (context) => {
+        const { favicon } = await readJsonBody(context, z.object({ favicon: faviconSchema.nullable() }));
+        return context.json(await context.get('services').tenants.updateFavicon(actorOf(context), favicon));
       },
     },
     {

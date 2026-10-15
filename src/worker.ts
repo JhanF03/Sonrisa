@@ -5,6 +5,7 @@
  */
 import { buildConfig, createApp } from './app.js';
 import type { SqlDatabase } from './db/database.js';
+import { openWorkerSocket } from './modules/mail/workerSocket.js';
 
 export interface WorkerBindings {
   DB: D1Database;
@@ -18,27 +19,50 @@ export interface WorkerBindings {
   TURNSTILE_SECRET_KEY?: string;
 }
 
+/** Debe coincidir con el segundo cron de wrangler.toml. */
+const REMINDERS_CRON = '7 * * * *';
+
 // La app se construye una vez por instancia (isolate) y se reutiliza.
 let cachedApp: ReturnType<typeof createApp> | undefined;
 
 function getApp(bindings: WorkerBindings): ReturnType<typeof createApp> {
-  cachedApp ??= createApp(bindings.DB as unknown as SqlDatabase, buildConfig(bindings));
+  cachedApp ??= createApp(bindings.DB as unknown as SqlDatabase, buildConfig(bindings), {
+    fetch: (input, init) => fetch(input, init),
+    openSocket: openWorkerSocket,
+  });
   return cachedApp;
 }
 
 export default {
-  fetch(request: Request, bindings: WorkerBindings, executionContext: ExecutionContext): Response | Promise<Response> {
-    return getApp(bindings).fetch(request, bindings, executionContext);
+  async fetch(request: Request, bindings: WorkerBindings, executionContext: ExecutionContext): Promise<Response> {
+    const app = getApp(bindings);
+    const response = await app.fetch(request, bindings, executionContext);
+    // Los correos se envían después de responder (el usuario no espera a Gmail).
+    executionContext.waitUntil(app.services.mail.flush());
+    return response;
   },
 
-  /** Cron Trigger (wrangler.toml): libera reservas vencidas y limpia datos temporales. */
-  scheduled(_controller: ScheduledController, bindings: WorkerBindings, executionContext: ExecutionContext): void {
-    executionContext.waitUntil(
-      getApp(bindings)
-        .services.maintenance.runScheduled()
-        .then(({ releasedHolds }) => {
-          if (releasedHolds > 0) console.log(`Mantenimiento: ${releasedHolds} reservas vencidas liberadas`);
+  /**
+   * Cron Triggers (wrangler.toml). Cada uno corre aparte y tiene su propio cupo
+   * de consultas a D1 (50 en el plan gratuito):
+   *   • cada 10 min → libera reservas vencidas y limpia datos temporales.
+   *   • cada hora   → recordatorios de pago y de demos por terminar (por correo).
+   */
+  scheduled(controller: ScheduledController, bindings: WorkerBindings, executionContext: ExecutionContext): void {
+    const { services } = getApp(bindings);
+    if (controller.cron === REMINDERS_CRON) {
+      executionContext.waitUntil(
+        services.notifications.sendReminders().then(async (sent) => {
+          if (sent > 0) console.log(`Recordatorios: ${sent} correos`);
+          await services.mail.flush();
         }),
+      );
+      return;
+    }
+    executionContext.waitUntil(
+      services.maintenance.runScheduled().then(({ releasedHolds }) => {
+        if (releasedHolds > 0) console.log(`Mantenimiento: ${releasedHolds} reservas vencidas liberadas`);
+      }),
     );
   },
 } satisfies ExportedHandler<WorkerBindings>;

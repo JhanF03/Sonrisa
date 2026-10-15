@@ -18,7 +18,8 @@ import type { AuthService } from '../../security/authService.js';
 import { verifyPassword } from '../../security/crypto.js';
 import { isPermission, PERMISSION_CATALOG, type Permission } from '../../security/permissions.js';
 import { isoNow } from '../../utils/time.js';
-import type { AuditService } from '../audit/auditService.js';
+import { diffFields, type AuditService } from '../audit/auditService.js';
+import { assertNotDemoDomain, claimEmail } from './emailClaims.js';
 import type { PlanService } from '../plans/planService.js';
 
 export interface RoleView {
@@ -185,8 +186,10 @@ export class UserService {
   ): Promise<UserView> {
     await this.assertCanAssignRoles(actor.tenantId, actorPermissions, input.roleIds);
     const normalizedEmail = input.email.trim().toLowerCase();
-    const existing = await this.db.prepare('SELECT 1 FROM users WHERE email = ?').bind(normalizedEmail).first();
-    if (existing) throw conflict('Ya existe un usuario con ese correo.');
+    const tenant = await this.db.prepare('SELECT is_showcase FROM tenants WHERE id = ?').bind(actor.tenantId).first<{ is_showcase: number }>();
+    const isShowcase = tenant?.is_showcase === 1;
+    if (!isShowcase) assertNotDemoDomain(normalizedEmail);
+    await claimEmail(this.db, normalizedEmail, isShowcase);
     await this.seats?.assertSeatAvailable(actor.tenantId, 'usuario');
 
     const userId = crypto.randomUUID();
@@ -227,7 +230,13 @@ export class UserService {
         action: 'usuario_actualizado',
         entity: 'usuario',
         entityId: userId,
-        details: { isActive: input.isActive, roleIds: input.roleIds },
+        details: {
+          cambios: diffFields(
+            { fullName: user.fullName, isActive: user.isActive, roleIds: [...user.roleIds].sort() },
+            { fullName: input.fullName, isActive: input.isActive, roleIds: [...input.roleIds].sort() },
+            ['fullName', 'isActive', 'roleIds'],
+          ),
+        },
       }),
     ]);
 

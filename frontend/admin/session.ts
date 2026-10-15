@@ -15,6 +15,7 @@ export interface SessionInfo {
     name: string;
     brandColor: string;
     logoUrl: string | null;
+    favicon: string | null;
     isShowcase: boolean;
     utcOffsetMinutes: number;
   };

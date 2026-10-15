@@ -16,6 +16,10 @@ import { EInvoiceService } from './modules/einvoicing/einvoiceService.js';
 import { PlanService } from './modules/plans/planService.js';
 import { PlatformService } from './modules/platform/platformService.js';
 import { PlatformAuthService } from './modules/platform/platformAuthService.js';
+import { MailService } from './modules/mail/mailService.js';
+import { NotificationService } from './modules/mail/notificationService.js';
+import type { OpenSocket } from './modules/mail/smtpClient.js';
+import { PasswordResetService } from './modules/users/passwordResetService.js';
 import { MaintenanceService } from './modules/maintenance/maintenanceService.js';
 import { PatientService } from './modules/patients/patientService.js';
 import { PaymentService } from './modules/payments/paymentService.js';
@@ -51,11 +55,16 @@ export interface AppServices {
   plans: PlanService;
   platformAuth: PlatformAuthService;
   turnstile: TurnstileVerifier;
+  mail: MailService;
+  notifications: NotificationService;
+  passwordResets: PasswordResetService;
 }
 
 export interface ExternalDependencies {
   /** Cliente HTTP para Wompi y Turnstile (inyectable en pruebas). */
   fetch: typeof fetch;
+  /** Conexión TLS para el correo (Workers: cloudflare:sockets; Node: tls). Sin ella, los correos quedan "omitidos". */
+  openSocket?: OpenSocket;
 }
 
 export function createServices(db: SqlDatabase, config: AppConfig, external: ExternalDependencies): AppServices {
@@ -74,6 +83,11 @@ export function createServices(db: SqlDatabase, config: AppConfig, external: Ext
 
   const inventory = new InventoryService(db, audit);
   const platform = new PlatformService(db, config, auth, new WompiApi(external.fetch), plans);
+  const mail = new MailService(db, config, external.openSocket ?? null);
+  const notifications = new NotificationService(db, mail, platform);
+
+  // Cada pago aplicado (Wompi o manual) envía su comprobante al consultorio.
+  platform.onPaymentRegistered = (paymentId) => mail.queue(notifications.paymentReceived(paymentId));
 
   // Al atender una cita: los anticipos pagados en línea se abonan a su cargo
   // y se descuentan los insumos de la receta del servicio.
@@ -110,5 +124,8 @@ export function createServices(db: SqlDatabase, config: AppConfig, external: Ext
     plans,
     platformAuth: new PlatformAuthService(db, config, auth, rateLimiter),
     turnstile: new TurnstileVerifier(config.turnstileSecretKey, external.fetch),
+    mail,
+    notifications,
+    passwordResets: new PasswordResetService(db, auth, audit, rateLimiter, mail, platform),
   };
 }

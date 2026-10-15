@@ -3,10 +3,11 @@
  */
 import type { SqlDatabase, SqlStatement } from '../../db/database.js';
 import type { Actor, TenantRow } from '../../http/context.js';
-import { AppError, conflict, notFound } from '../../http/errors.js';
+import { AppError, notFound } from '../../http/errors.js';
 import { DEFAULT_ROLES } from '../../security/permissions.js';
 import { addDays, isoNow, todayLocal } from '../../utils/time.js';
-import type { AuditService } from '../audit/auditService.js';
+import { diffFields, type AuditService } from '../audit/auditService.js';
+import { assertNotDemoDomain, claimEmail } from '../users/emailClaims.js';
 
 export interface TenantSettingsInput {
   name: string;
@@ -49,6 +50,8 @@ export interface NewTenantInput {
   monthlyPrice?: number;
   graceDays?: number;
   billingMode?: 'auto' | 'exento';
+  /** Ícono de la pestaña ya validado (PNG en data URL). */
+  favicon?: string | null;
 }
 
 /** Si no se indica, un consultorio real arranca con 30 días cubiertos. */
@@ -77,6 +80,7 @@ export class TenantService {
   }
 
   async updateSettings(actor: Actor, input: TenantSettingsInput): Promise<TenantRow> {
+    const previous = await this.getById(actor.tenantId);
     await this.db.batch([
       this.db
         .prepare(
@@ -91,7 +95,37 @@ export class TenantService {
           input.reactivationMonths, input.onlineBookingEnabled ? 1 : 0, input.closeOnHolidays ? 1 : 0,
           actor.tenantId,
         ),
-      this.audit.buildStatement(actor, { action: 'configuracion_actualizada', entity: 'consultorio', entityId: actor.tenantId }),
+      this.audit.buildStatement(actor, {
+        action: 'configuracion_actualizada',
+        entity: 'consultorio',
+        entityId: actor.tenantId,
+        details: {
+          cambios: diffFields(
+            previous as unknown as Record<string, unknown>,
+            {
+              name: input.name, phone: input.phone, address: input.address, city: input.city, brand_color: input.brandColor, logo_url: input.logoUrl,
+              slot_interval_minutes: input.slotIntervalMinutes, min_booking_notice_hours: input.minBookingNoticeHours, booking_window_days: input.bookingWindowDays,
+              reactivation_months: input.reactivationMonths, online_booking_enabled: input.onlineBookingEnabled ? 1 : 0, close_on_holidays: input.closeOnHolidays ? 1 : 0,
+            },
+            ['name', 'phone', 'address', 'city', 'brand_color', 'logo_url', 'slot_interval_minutes', 'min_booking_notice_hours', 'booking_window_days', 'reactivation_months', 'online_booking_enabled', 'close_on_holidays'],
+          ),
+        },
+      }),
+    ]);
+    return this.getById(actor.tenantId);
+  }
+
+  /** Cambia o quita el ícono de la pestaña del consultorio. */
+  async updateFavicon(actor: Actor, favicon: string | null): Promise<TenantRow> {
+    const previous = await this.getById(actor.tenantId);
+    await this.db.batch([
+      this.db.prepare('UPDATE tenants SET favicon = ? WHERE id = ?').bind(favicon, actor.tenantId),
+      this.audit.buildStatement(actor, {
+        action: 'icono_actualizado',
+        entity: 'consultorio',
+        entityId: actor.tenantId,
+        details: { cambios: { favicon: [previous.favicon ? 'personalizado' : 'predeterminado', favicon ? 'personalizado' : 'predeterminado'] } },
+      }),
     ]);
     return this.getById(actor.tenantId);
   }
@@ -136,11 +170,8 @@ export class TenantService {
    * Todo en un solo batch atómico.
    */
   async createTenant(tenantInput: NewTenantInput, adminInput: NewAdminInput): Promise<{ tenantId: string; slug: string; adminUserId: string }> {
-    const existingUser = await this.db
-      .prepare('SELECT id FROM users WHERE email = ?')
-      .bind(adminInput.email.toLowerCase())
-      .first();
-    if (existingUser) throw conflict('Ya existe un usuario con ese correo.');
+    if (!tenantInput.isShowcase) assertNotDemoDomain(adminInput.email);
+    await claimEmail(this.db, adminInput.email, tenantInput.isShowcase === true);
 
     const tenantId = crypto.randomUUID();
     const adminUserId = crypto.randomUUID();
@@ -150,14 +181,14 @@ export class TenantService {
     const statements: SqlStatement[] = [
       this.db
         .prepare(
-          `INSERT INTO tenants (id, slug, name, city, phone, brand_color, logo_url, is_showcase, paid_until, monthly_price, grace_days, billing_mode, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO tenants (id, slug, name, city, phone, brand_color, logo_url, is_showcase, paid_until, monthly_price, grace_days, billing_mode, favicon, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           tenantId, slug, tenantInput.name, tenantInput.city ?? null, tenantInput.phone ?? null,
           tenantInput.brandColor ?? '#2742a8', tenantInput.logoUrl ?? null, tenantInput.isShowcase ? 1 : 0,
           tenantInput.isShowcase ? null : (tenantInput.paidUntil ?? addDays(todayLocal(-300), DEFAULT_INITIAL_DAYS)),
-          tenantInput.monthlyPrice ?? 0, tenantInput.graceDays ?? 3, tenantInput.billingMode ?? 'auto', now,
+          tenantInput.monthlyPrice ?? 0, tenantInput.graceDays ?? 3, tenantInput.billingMode ?? 'auto', tenantInput.favicon ?? null, now,
         ),
       this.db
         .prepare(

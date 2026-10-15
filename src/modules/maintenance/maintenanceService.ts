@@ -1,7 +1,8 @@
 /**
  * Tareas de mantenimiento: liberar retenciones vencidas, vencer intentos de
  * pago antiguos, limpiar contadores de intentos, borrar demos vencidas y
- * aplicar bajadas de plan programadas.
+ * aplicar bajadas de plan programadas. Los recordatorios de pago van en
+ * otra tarea (cada hora) para no gastar el cupo de consultas de esta.
  *
  * Se ejecutan con el Cron Trigger de Cloudflare (cada 10 minutos, gratis),
  * con un temporizador en Node, y además de forma "perezosa" al abrir la agenda

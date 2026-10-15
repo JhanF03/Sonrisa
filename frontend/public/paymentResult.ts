@@ -2,6 +2,7 @@
  * Página a la que vuelve el paciente desde Wompi (/c/:slug/pago/:token?id=…).
  * El servidor confirma el pago consultando a Wompi (nunca confía en la URL).
  */
+import { applyFavicon } from '../core/favicon.js';
 import { api } from '../core/api.js';
 import { html, safeUrl, setContent } from '../core/dom.js';
 import { formatLongDate, formatMoney, formatTime } from '../core/format.js';
@@ -12,7 +13,7 @@ interface PaymentState {
   state: 'aprobado' | 'pendiente' | 'rechazado' | 'vencido' | 'sin_cupo' | 'cancelado';
   canRetry: boolean;
   amount: number;
-  clinic: { name: string; brandColor: string; logoUrl: string | null; phone: string | null; address: string | null; city: string | null };
+  clinic: { name: string; brandColor: string; logoUrl: string | null; favicon?: string | null; phone: string | null; address: string | null; city: string | null };
   appointment: { startAt: string; serviceName: string; professionalName: string };
   manageUrl: string | null;
   calendarUrl: string | null;
@@ -37,6 +38,7 @@ export async function renderPaymentResultPage(root: HTMLElement, token: string):
       return;
     }
     applyBrandColor(data.clinic.brandColor);
+  applyFavicon(data.clinic.favicon);
     setContent(root, publicLayout(data.clinic, stateContent(data, polls < MAX_POLLS)));
     refreshIcons(root);
     // PSE o Nequi pueden tardar: se consulta de nuevo mientras siga pendiente.

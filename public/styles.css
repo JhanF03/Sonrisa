@@ -4,7 +4,7 @@
    (tratamientos) y tinta roja (hallazgos) sobre papel blanco. De ahí sale la
    paleta: esmalte, papel, grafito, tinta azul y tinta roja.
    Tipografías propias (Funnel Display / Funnel Sans, servidas desde /fonts).
-   Esquinas pequeñas: 3 px en controles, 6 px en contenedores.
+   Esquinas moderadas: 6 px en controles, 10-12 px en contenedores.
    ========================================================================== */
 
 @font-face {
@@ -60,10 +60,10 @@
   --shadow-md: 0 2px 0 rgb(29 35 43 / 0.06), 0 8px 24px rgb(29 35 43 / 0.08);
   --shadow-lg: 0 24px 60px rgb(29 35 43 / 0.22);
 
-  --radius-xs: 3px;
-  --radius-sm: 3px;
-  --radius-md: 6px;
-  --radius-lg: 6px;
+  --radius-xs: 6px;   /* botones, campos, íconos */
+  --radius-sm: 6px;
+  --radius-md: 10px;  /* tarjetas, modales, tablas */
+  --radius-lg: 12px;
   --font: "Funnel Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --font-display: "Funnel Display", "Funnel Sans", ui-sans-serif, system-ui, sans-serif;
   --fast: 140ms ease;
@@ -186,7 +186,7 @@ code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-siz
 
 /* ─── Marca ────────────────────────────────────────────────────────────── */
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
-.brand-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-xs); background: var(--accent); color: var(--on-accent); flex-shrink: 0; overflow: hidden; }
+.brand-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 9px; background: var(--accent); color: var(--on-accent); flex-shrink: 0; overflow: hidden; }
 .brand-mark img { width: 100%; height: 100%; object-fit: cover; }
 .brand-mark svg.logo-tooth { width: 24px; height: 24px; }
 .brand-mark svg.icon { width: 20px; height: 20px; }
@@ -266,7 +266,7 @@ code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-siz
 .row-link:hover { color: var(--accent); text-decoration: underline; }
 
 /* Etiquetas de estado: rectángulo con borde izquierdo, como una marca en la ficha. */
-.badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: var(--radius-xs); border-left: 3px solid currentColor; font-size: 12.5px; font-weight: 650; white-space: nowrap; line-height: 1.6; }
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 4px; border-left: 3px solid currentColor; font-size: 12.5px; font-weight: 650; white-space: nowrap; line-height: 1.6; }
 .badge svg.icon { width: 14px; height: 14px; }
 .badge-pendiente, .badge-neutral { background: var(--neutral-soft); color: var(--text-muted); }
 .badge-confirmada, .badge-info { background: var(--info-soft); color: var(--info); }
@@ -457,7 +457,9 @@ code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-siz
 .receipt .total { font-size: 17px; font-weight: 700; text-align: right; }
 
 @media print {
-  body > *:not(.modal) { display: none !important; }
+  /* Con un modal abierto (recibos, comprobantes) se imprime solo el modal. */
+  body:has(> dialog.modal[open]) > *:not(.modal) { display: none !important; }
+  .site-bar, .legal-toc, .no-print { display: none !important; }
   .modal { position: static; box-shadow: none; border: 0; width: 100%; max-height: none; }
   .modal-header, .modal-actions, .no-print { display: none !important; }
   .modal::backdrop { display: none; }
@@ -670,6 +672,33 @@ tr.is-muted td { opacity: 0.55; }
 .closing .button-secondary:hover:not(:disabled) { border-color: #fff; }
 .site-footer { max-width: 1200px; margin: 0 auto; padding: 22px 20px 32px; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; font-size: 13.5px; color: var(--text-subtle); }
 
+/* ─── Información legal (pie, términos y datos personales) ─────────────── */
+.legal-footer { flex-direction: column; border-top: 1px solid var(--border); }
+.legal-footer-main { display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between; }
+.legal-footer-links { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.legal-footer a, .legal-links a { color: var(--text-muted); }
+.legal-footer-tax { display: flex; gap: 8px; align-items: flex-start; max-width: 92ch; margin: 0; line-height: 1.55; }
+.legal-footer-tax .icon { flex-shrink: 0; margin-top: 2px; }
+.legal-doc { max-width: 780px; }
+.legal-doc h1 { font-size: clamp(26px, 3.4vw, 34px); margin: 4px 0 18px; }
+.legal-doc h2 { font-size: 18px; margin: 28px 0 8px; }
+.legal-doc p, .legal-doc li { font-size: 15.5px; line-height: 1.65; color: var(--text); }
+.legal-doc p + p { margin-top: 10px; }
+.legal-doc ul { padding-left: 20px; display: grid; gap: 6px; margin: 6px 0 10px; }
+.legal-doc section { scroll-margin-top: 80px; }
+.legal-kicker { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 14px; font-weight: 600; }
+.legal-toc { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); padding: 12px 16px; }
+.legal-toc ol { margin: 0; padding-left: 20px; columns: 2 240px; column-gap: 28px; font-size: 14.5px; line-height: 1.9; }
+.site-bar nav a[aria-current="page"] { color: var(--text); background: var(--surface-sunken); }
+.legal-links { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; }
+.tax-notice { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-xs); background: var(--surface-muted); font-size: 13.5px; line-height: 1.55; color: var(--text-muted); }
+.tax-notice .icon { flex-shrink: 0; color: var(--accent); margin-top: 1px; }
+.meter { height: 8px; border-radius: 99px; background: var(--surface-sunken); overflow: hidden; }
+.meter > span { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.meter.is-warning > span { background: var(--warning, #b7791f); }
+.meter.is-danger > span { background: var(--danger); }
+.mail-steps { margin: 6px 0 4px; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; color: var(--text-muted); }
+
 /* ─── Responsive ───────────────────────────────────────────────────────── */
 @media (max-width: 960px) {
   .shell { grid-template-columns: 1fr; }
@@ -707,3 +736,12 @@ tr.is-muted td { opacity: 0.55; }
   .billing-toggle button { padding: 8px 10px; font-size: 13px; }
   .site-section { padding: 40px 16px; }
 }
+.audit-detail { display: grid; gap: 2px; color: var(--text-muted); font-size: 12.5px; max-width: 420px; }
+.audit-detail strong { color: var(--text); font-weight: 600; }
+.favicon-picker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.favicon-preview { display: grid; place-items: center; width: 40px; height: 40px; border: 1px dashed var(--border-strong); border-radius: var(--radius-xs); background: var(--surface-muted); color: var(--text-subtle); overflow: hidden; flex-shrink: 0; }
+.favicon-preview img { width: 32px; height: 32px; border-radius: 4px; }
+.favicon-picker label.button { cursor: pointer; }
+.sidebar-legal { padding: 4px 10px 0; }
+.sidebar-legal a { color: #98a3ae; text-decoration: none; }
+.sidebar-legal a:hover { color: #fff; text-decoration: underline; }

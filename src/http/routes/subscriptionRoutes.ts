@@ -8,7 +8,7 @@ import { z } from 'zod';
 import type { WompiEvent } from '../../modules/payments/wompiClient.js';
 import { requireAuth, type AppEnv } from '../context.js';
 import { authenticatedAccess, defineRoutes, publicAccess, requiresAny } from '../routeRegistry.js';
-import { readJsonBody } from '../validation.js';
+import { readIdParam, readJsonBody } from '../validation.js';
 
 export function registerSubscriptionRoutes(app: Hono<AppEnv>): void {
   defineRoutes(app, [
@@ -49,6 +49,14 @@ export function registerSubscriptionRoutes(app: Hono<AppEnv>): void {
         );
         return context.json(await context.get('services').platform.verifyCheckout(auth.tenant.id, input.reference, input.transactionId));
       },
+    },
+    {
+      method: 'GET',
+      path: '/api/subscription/payments/:id/receipt',
+      access: requiresAny('suscripcion.pagar'),
+      allowWhenSuspended: true,
+      handler: async (context) =>
+        context.json(await context.get('services').platform.getReceipt(readIdParam(context), requireAuth(context).tenant.id)),
     },
     {
       method: 'POST',

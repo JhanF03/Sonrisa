@@ -25,7 +25,7 @@ const ICONS = {
   send: 'paper-plane-tilt', settings: 'gear-six', shield: 'shield', 'shield-check': 'shield-check', smartphone: 'device-mobile', smile: 'smiley', sparkles: 'sparkle',
   stethoscope: 'stethoscope', store: 'storefront', sun: 'sun', 'trash-2': 'trash', 'trending-up': 'trend-up', 'triangle-alert': 'warning', truck: 'truck',
   'undo-2': 'arrow-u-up-left', user: 'user', 'user-check': 'user-check', 'user-plus': 'user-plus', 'user-x': 'user-minus', users: 'users', wallet: 'wallet',
-  webhook: 'webhooks-logo', x: 'x', tooth: 'tooth',
+  webhook: 'webhooks-logo', x: 'x', tooth: 'tooth', image: 'image', mail: 'envelope-simple', 'mail-check': 'envelope-simple-open', gavel: 'gavel',
 };
 
 const entries = Object.entries(ICONS).map(([name, phosphor]) => {

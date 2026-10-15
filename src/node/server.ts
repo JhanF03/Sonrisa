@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { buildConfig, createApp } from '../app.js';
 import { NodeSqliteDatabase } from '../db/nodeSqliteDatabase.js';
+import { openNodeSocket } from './nodeSocket.js';
 import { seedDemoData } from '../modules/platform/demoDataService.js';
 import { generateSecureToken, hashPassword } from '../security/crypto.js';
 import { TenantService } from '../modules/tenants/tenantService.js';
@@ -67,7 +68,7 @@ console.log('… Preparando consultorio de demostración');
 await createDemoClinicIfEmpty();
 console.log(`… Iniciando servidor web en el puerto ${port}`);
 
-const app = createApp(database, config);
+const app = createApp(database, config, { fetch: (input, init) => fetch(input, init), openSocket: openNodeSocket });
 const publicDirectory = path.relative(projectRoot, path.join(projectRoot, 'public'));
 const indexHtml = readFileSync(path.join(projectRoot, 'public', 'index.html'), 'utf8');
 const platformHtml = readFileSync(path.join(projectRoot, 'public', 'plataforma.html'), 'utf8');
@@ -83,6 +84,10 @@ const MAINTENANCE_INTERVAL_MS = 5 * 60_000;
 setInterval(() => {
   app.services.maintenance.runScheduled().catch((error: unknown) => console.error('[mantenimiento]', error));
 }, MAINTENANCE_INTERVAL_MS).unref();
+// Recordatorios de pago por correo cada hora (en Cloudflare: segundo Cron Trigger).
+setInterval(() => {
+  app.services.notifications.sendReminders().catch((error: unknown) => console.error('[recordatorios]', error));
+}, 60 * 60_000).unref();
 
 serve({ fetch: app.fetch, port }, () => {
   console.log(`\n🦷 Agenda Sonrisa lista en http://localhost:${port}`);

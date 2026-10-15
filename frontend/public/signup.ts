@@ -9,11 +9,13 @@
 import { api } from '../core/api.js';
 import { emptyToNull, html, raw, readForm, setContent, type SafeHtml } from '../core/dom.js';
 import { brandLockup } from '../core/brand.js';
+import { bindFaviconFields, faviconField } from '../core/favicon.js';
 import { formatLongDate, formatMoney } from '../core/format.js';
 import { planCard, type BillingView } from '../core/planCards.js';
 import { copyToClipboard, icon, loadingState, openFormModal, openModal, themeToggleButton } from '../core/ui.js';
 import type { AddonDefinition, PlanDefinition } from '../../src/shared/plans.js';
 import { mountTurnstile, readTurnstileToken } from './booking.js';
+import { legalFooter, loadLegal, type PublicLegal } from './legal.js';
 
 interface PublicOffer {
   plans: PlanDefinition[];
@@ -33,6 +35,8 @@ export async function renderSignupPage(root: HTMLElement): Promise<void> {
   document.title = 'Planes y precios · Agenda Sonrisa';
   setContent(root, html`<main class="public-page">${loadingState('Cargando planes…')}</main>`);
   let offer: PublicOffer;
+  // Los datos legales no deben impedir ver los planes: si fallan, el pie sale sin ellos.
+  const legalRequest = loadLegal().catch(() => null);
   try {
     offer = await api.get<PublicOffer>('/api/public/offer');
   } catch {
@@ -43,7 +47,7 @@ export async function renderSignupPage(root: HTMLElement): Promise<void> {
   const params = new URLSearchParams(window.location.search);
   let billing: BillingView = 'mensual';
 
-  setContent(root, pageMarkup(offer));
+  setContent(root, pageMarkup(offer, await legalRequest));
   const plansContainer = root.querySelector<HTMLElement>('[data-plans]') as HTMLElement;
   const drawPlans = () => {
     setContent(
@@ -89,7 +93,7 @@ export async function renderSignupPage(root: HTMLElement): Promise<void> {
 const inkArrow = (path: string, width: number, height: number) =>
   raw(`<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-hidden="true"><path d="${path}"/></svg>`);
 
-function pageMarkup(offer: PublicOffer): SafeHtml {
+function pageMarkup(offer: PublicOffer, legal: PublicLegal | null): SafeHtml {
   const trial = `${offer.trialDays} días gratis`;
   const primaryCta = offer.selfSignupEnabled
     ? html`<button class="button button-primary" data-signup="${FEATURED_PLAN}">${icon('rocket')} Crear mi consultorio</button>`
@@ -120,10 +124,10 @@ function pageMarkup(offer: PublicOffer): SafeHtml {
         <div class="hero-shots">
           <figure class="shot-browser" style="margin: 0">
             <div class="shot-browser-bar"><i></i><i></i><i></i><span>Panel del consultorio</span></div>
-            <img src="/img/panel-agenda.webp" width="1280" height="800" alt="Agenda del día con una columna por profesional y las citas de colores según su estado" fetchpriority="high" />
+            <img src="/img/panel-agenda.webp?v=2" width="1280" height="800" alt="Agenda del día con una columna por profesional y las citas de colores según su estado" fetchpriority="high" />
           </figure>
           <figure class="shot-phone" style="margin: 0">
-            <img src="/img/reserva-celular.webp" width="390" height="780" alt="Página de reservas en el celular: el paciente elige servicio, día y hora" loading="lazy" />
+            <img src="/img/reserva-celular.webp?v=2" width="390" height="780" alt="Página de reservas en el celular: el paciente elige servicio, día y hora" loading="lazy" />
           </figure>
           <p class="ink-note is-agenda">${inkArrow('M4 6c22 2 40 12 46 34', 56, 44)} Cada profesional en su columna</p>
           <p class="ink-note is-phone">${inkArrow('M48 6C30 4 12 12 6 30', 54, 36)} El paciente reserva solo, a cualquier hora</p>
@@ -139,17 +143,17 @@ function pageMarkup(offer: PublicOffer): SafeHtml {
           <article class="feature">
             <h3>${icon('message-circle')} Recordatorios por WhatsApp</h3>
             <p>Cada tarde ves quién tiene cita mañana y le envías el recordatorio con un toque, desde tu propio WhatsApp.</p>
-            <div class="feature-shot"><img src="/img/recordatorios.webp" width="1280" height="800" alt="Lista de recordatorios de las citas de mañana" loading="lazy" /></div>
+            <div class="feature-shot"><img src="/img/recordatorios.webp?v=2" width="1280" height="800" alt="Lista de recordatorios de las citas de mañana" loading="lazy" /></div>
           </article>
           <article class="feature">
             <h3>${icon('wallet')} Caja y cartera</h3>
             <p>Registra abonos y anticipos, imprime el recibo y cierra el día sabiendo cuánto entró y quién quedó debiendo.</p>
-            <div class="feature-shot"><img src="/img/caja.webp" width="1280" height="800" alt="Caja del día con pagos y recibos" loading="lazy" /></div>
+            <div class="feature-shot"><img src="/img/caja.webp?v=2" width="1280" height="800" alt="Caja del día con pagos y recibos" loading="lazy" /></div>
           </article>
           <article class="feature">
             <h3>${icon('chart-column')} Indicadores del mes</h3>
             <p>Citas atendidas, inasistencias, ingresos y servicios más vendidos, sin armar hojas de cálculo.</p>
-            <div class="feature-shot"><img src="/img/indicadores.webp" width="1280" height="800" alt="Indicadores del mes del consultorio" loading="lazy" /></div>
+            <div class="feature-shot"><img src="/img/indicadores.webp?v=2" width="1280" height="800" alt="Indicadores del mes del consultorio" loading="lazy" /></div>
           </article>
         </div>
       </section>
@@ -177,6 +181,8 @@ function pageMarkup(offer: PublicOffer): SafeHtml {
           <div><h3>¿Cómo pago?</h3><p>Con tarjeta, PSE, Nequi o Bancolombia desde tu panel, mensual o anual. También puedes pagar por transferencia.</p></div>
           <div><h3>¿Mis datos están seguros?</h3><p>Cada consultorio ve solo su información, con usuarios y permisos por rol, y queda registro de quién hizo cada cambio.</p></div>
           <div><h3>¿Necesito instalar algo?</h3><p>No. Funciona en el navegador del computador y del celular.</p></div>
+          <div><h3>¿Los precios tienen IVA?</h3><p>${legal?.taxRegime === 'responsable_iva' ? 'Sí, el IVA ya está incluido en el precio publicado y recibes factura electrónica.' : 'No. El precio publicado es el total que pagas: no se le suma IVA. Por cada pago recibes un comprobante en tu correo.'}</p></div>
+          <div><h3>¿Puedo cancelar?</h3><p>Cuando quieras. No hay permanencia ni cobros automáticos a tu tarjeta: pagas cada mes o cada año desde tu panel.</p></div>
         </div>
       </section>
     </main>
@@ -186,9 +192,14 @@ function pageMarkup(offer: PublicOffer): SafeHtml {
           <div class="hero-actions">${primaryCta}${offer.selfDemoEnabled && !offer.fromDemo ? html`<button class="button button-secondary" data-action="demo">${icon('sparkles')} Ver una demo con datos</button>` : ''}</div>
         </div></section>`
       : ''}
-    <footer class="site-footer"><span>Agenda Sonrisa, hecho en Colombia.</span><a href="/app">Ingresar a mi consultorio</a></footer>
+    ${legalFooter(legal)}
   </div>`;
 }
+
+/** Aceptación de términos y datos personales (queda registrada con fecha, IP y versión). */
+const termsCheckbox = html`<label class="checkbox"><input type="checkbox" name="acceptTerms" value="1" required />
+  <span>Acepto los <a href="/legal/terminos" target="_blank" rel="noopener">términos del servicio</a> y autorizo el
+  <a href="/legal/privacidad" target="_blank" rel="noopener">tratamiento de mis datos personales</a> (Ley 1581 de 2012).</span></label>`;
 
 const trapField = html`<label class="trap-field" aria-hidden="true">Sitio web<input name="website" tabindex="-1" autocomplete="off" /></label>`;
 
@@ -213,6 +224,7 @@ function openDemoModal(offer: PublicOffer): void {
         <label class="field"><span>Nombre de tu consultorio (opcional)</span><input name="clinicName" maxlength="120" /></label>
         ${passwordField('Contraseña para entrar a la demo')}
       </div>
+      ${termsCheckbox}
       ${trapField}${turnstileField(offer)}`,
     onSubmit: async (form) => {
       const values = readForm(form);
@@ -222,6 +234,7 @@ function openDemoModal(offer: PublicOffer): void {
         phone: emptyToNull(values.phone),
         clinicName: emptyToNull(values.clinicName),
         password: values.password,
+        acceptTerms: values.acceptTerms === '1',
         website: values.website || undefined,
         turnstileToken: readTurnstileToken(form),
       });
@@ -259,8 +272,9 @@ function openSignupModal(offer: PublicOffer, planId: string): void {
         <label class="field"><span>Correo (con este ingresas)</span><input name="email" type="email" required maxlength="200" autocomplete="email" value="${contact?.contactEmail ?? ''}" /></label>
         <label class="field"><span>Celular</span><input name="phone" maxlength="30" autocomplete="tel" inputmode="tel" value="${contact?.contactPhone ?? ''}" /></label>
         ${passwordField('Contraseña')}
+        ${faviconField()}
       </div>
-      <label class="checkbox"><input type="checkbox" name="acceptTerms" value="1" required /> <span>Acepto los términos del servicio y el tratamiento de mis datos personales (Ley 1581 de 2012).</span></label>
+      ${termsCheckbox}
       ${trapField}${turnstileField(offer)}`,
     onSubmit: async (form) => {
       const values = readForm(form);
@@ -273,11 +287,20 @@ function openSignupModal(offer: PublicOffer, planId: string): void {
         phone: emptyToNull(values.phone),
         password: values.password,
         acceptTerms: values.acceptTerms === '1',
+        favicon: values.favicon || null,
         website: values.website || undefined,
         turnstileToken: readTurnstileToken(form),
       });
       showSignupDone(result);
     },
+  });
+  bindFaviconFields(modal.body);
+  modal.body.addEventListener('favicon-error', (event) => {
+    const errorElement = modal.body.querySelector<HTMLElement>('.form-error');
+    if (errorElement) {
+      errorElement.textContent = (event as CustomEvent<string>).detail;
+      errorElement.hidden = false;
+    }
   });
   mountTurnstile(modal.body);
 }

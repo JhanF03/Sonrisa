@@ -7,7 +7,7 @@ import type { SqlDatabase } from '../../db/database.js';
 import type { Actor } from '../../http/context.js';
 import { conflict, notFound } from '../../http/errors.js';
 import { isoNow } from '../../utils/time.js';
-import type { AuditService } from '../audit/auditService.js';
+import { diffFields, type AuditService } from '../audit/auditService.js';
 
 export interface PatientRow {
   id: string;
@@ -151,7 +151,21 @@ export class PatientService {
           input.documentType, input.documentNumber, input.fullName, input.phone, input.email, input.birthDate,
           input.guardianName, input.guardianPhone, input.adminNotes, isoNow(), patientId, actor.tenantId,
         ),
-      this.audit.buildStatement(actor, { action: 'paciente_actualizado', entity: 'paciente', entityId: patientId }),
+      this.audit.buildStatement(actor, {
+        action: 'paciente_actualizado',
+        entity: 'paciente',
+        entityId: patientId,
+        details: {
+          cambios: diffFields(
+            previous as unknown as Record<string, unknown>,
+            {
+              document_type: input.documentType, document_number: input.documentNumber, full_name: input.fullName, phone: input.phone,
+              email: input.email, birth_date: input.birthDate, guardian_name: input.guardianName, guardian_phone: input.guardianPhone, admin_notes: input.adminNotes,
+            },
+            ['document_type', 'document_number', 'full_name', 'phone', 'email', 'birth_date', 'guardian_name', 'guardian_phone', 'admin_notes'],
+          ),
+        },
+      }),
     ]);
     return this.getById(actor.tenantId, patientId);
   }

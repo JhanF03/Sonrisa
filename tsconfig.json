@@ -15,5 +15,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"],
-  "exclude": ["src/worker.ts"]
+  "exclude": ["src/worker.ts", "src/modules/mail/workerSocket.ts"]
 }

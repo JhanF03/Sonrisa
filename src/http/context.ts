@@ -72,6 +72,8 @@ export interface TenantRow {
   contact_email: string | null;
   contact_phone: string | null;
   converted_tenant_id: string | null;
+  /** Ícono de la pestaña (PNG 64×64 en data URL) o null. */
+  favicon: string | null;
 }
 
 /** Quién está haciendo la petición (usuario autenticado). */
@@ -92,6 +94,8 @@ export interface Actor {
   tenantId: string;
   userId: string | null;
   ip: string;
+  /** Navegador o app desde donde se hizo la acción (bitácora). */
+  userAgent?: string | null;
 }
 
 export type AppEnv = {
@@ -114,5 +118,5 @@ export function requireAuth(context: AppContext): AuthContext {
 
 export function actorOf(context: AppContext): Actor {
   const auth = requireAuth(context);
-  return { tenantId: auth.tenant.id, userId: auth.userId, ip: context.get('clientIp') };
+  return { tenantId: auth.tenant.id, userId: auth.userId, ip: context.get('clientIp'), userAgent: context.req.header('User-Agent')?.slice(0, 300) ?? null };
 }

@@ -6,3 +6,4 @@ data/
 .dev.vars
 *.log
 .DS_Store
+respaldo-*.sql

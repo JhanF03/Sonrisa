@@ -5,7 +5,7 @@ import type { SqlDatabase } from '../../db/database.js';
 import type { Actor } from '../../http/context.js';
 import { AppError, conflict, notFound } from '../../http/errors.js';
 import { isoNow } from '../../utils/time.js';
-import type { AuditService } from '../audit/auditService.js';
+import { diffFields, type AuditService } from '../audit/auditService.js';
 
 export interface ServiceRow {
   id: string;
@@ -140,10 +140,15 @@ export class CatalogService {
         entity: 'servicio',
         entityId: serviceId,
         details: {
-          ...(previous.price !== input.price ? { previousPrice: previous.price, newPrice: input.price } : {}),
-          ...(previous.prepayment_mode !== input.prepaymentMode || previous.prepayment_value !== input.prepaymentValue
-            ? { prepayment: `${input.prepaymentMode}:${input.prepaymentValue}` }
-            : {}),
+          cambios: diffFields(
+            previous as unknown as Record<string, unknown>,
+            {
+              code: input.code, name: input.name, category: input.category, price: input.price, duration_minutes: input.durationMinutes,
+              tax_rate_bps: input.taxRateBps, is_bookable_online: input.isBookableOnline ? 1 : 0, is_active: input.isActive ? 1 : 0,
+              prepayment_mode: input.prepaymentMode, prepayment_value: input.prepaymentMode === 'ninguno' ? 0 : input.prepaymentValue,
+            },
+            ['code', 'name', 'category', 'price', 'duration_minutes', 'tax_rate_bps', 'is_bookable_online', 'is_active', 'prepayment_mode', 'prepayment_value'],
+          ),
         },
       }),
     ]);

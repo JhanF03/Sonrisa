@@ -26,6 +26,27 @@ const loginSchema = z.object({
 export function registerAuthRoutes(app: Hono<AppEnv>): void {
   defineRoutes(app, [
     {
+      // "¿Olvidaste tu contraseña?": responde igual exista o no el correo.
+      method: 'POST',
+      path: '/api/auth/forgot',
+      access: publicAccess,
+      handler: async (context) => {
+        const { email } = await readJsonBody(context, z.object({ email: z.email('Correo inválido.').max(200) }));
+        await context.get('services').passwordResets.request(email, context.get('clientIp'), new URL(context.req.url).origin);
+        return context.json({ ok: true, message: 'Si el correo tiene una cuenta, te enviamos un enlace para crear una contraseña nueva. Revisa también la carpeta de spam.' });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/auth/reset',
+      access: publicAccess,
+      handler: async (context) => {
+        const input = await readJsonBody(context, z.object({ token: z.string().min(20).max(200), password: PASSWORD_POLICY }));
+        await context.get('services').passwordResets.reset(input.token, input.password, context.get('clientIp'));
+        return context.json({ ok: true });
+      },
+    },
+    {
       method: 'POST',
       path: '/api/auth/login',
       access: publicAccess,
@@ -53,6 +74,8 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
       handler: async (context) => {
         const cookieName = getSessionCookieName(context.req.url);
         const sessionToken = getCookie(context, cookieName);
+        const auth = context.get('auth');
+        if (auth) await context.get('services').audit.record(actorOf(context), { action: 'logout', entity: 'usuario', entityId: auth.userId });
         if (sessionToken) await context.get('services').auth.logout(sessionToken);
         deleteCookie(context, cookieName, { path: '/', secure: cookieName.startsWith('__Host-') });
         return context.json({ ok: true });
@@ -74,6 +97,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
             name: auth.tenant.name,
             brandColor: auth.tenant.brand_color,
             logoUrl: auth.tenant.logo_url,
+            favicon: auth.tenant.favicon,
             isShowcase: auth.tenant.is_showcase === 1,
             utcOffsetMinutes: auth.tenant.utc_offset_minutes,
           },
@@ -113,11 +137,13 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
           z.object({ currentPassword: z.string().min(1).max(128), newPassword: PASSWORD_POLICY }),
         );
         const actor = actorOf(context);
-        await context.get('services').users.changeOwnPassword(
-          { ...actor, userId: requireAuth(context).userId },
-          input.currentPassword,
-          input.newPassword,
-        );
+        const services = context.get('services');
+        const userId = requireAuth(context).userId;
+        // Con una sesión robada no se puede adivinar la clave actual a fuerza de intentos.
+        await services.rateLimiter.consume(`password-change:${userId}`, { limit: 5, windowMs: 15 * 60_000, message: 'Demasiados intentos. Espera 15 minutos.' });
+        await services.users.changeOwnPassword({ ...actor, userId }, input.currentPassword, input.newPassword);
+        // Cambiar la clave cierra las sesiones abiertas en otros dispositivos (no la actual).
+        await services.auth.revokeOtherSessions(userId, getCookie(context, getSessionCookieName(context.req.url)) ?? '');
         return context.json({ ok: true });
       },
     },

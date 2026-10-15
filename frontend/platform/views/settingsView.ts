@@ -5,6 +5,7 @@ import { api } from '../../core/api.js';
 import { $, emptyToNull, html, readForm, setContent } from '../../core/dom.js';
 import { icon, refreshIcons, toast, withErrorToast } from '../../core/ui.js';
 import { type PlatformSettings } from '../types.js';
+import { renderMailAndLegalSettings } from './mailLegalSettings.js';
 
 export async function renderSettingsView(content: HTMLElement, reload: () => Promise<void>): Promise<void> {
   const settings = await api.get<PlatformSettings>('/api/platform/settings');
@@ -45,8 +46,10 @@ export async function renderSettingsView(content: HTMLElement, reload: () => Pro
           ${settings.wompiConfigured ? html`<button class="button button-secondary" type="button" data-action="test-wompi">${icon('plug-zap')} Probar Wompi</button>` : ''}
         </div>
       </form>
-    </section>`,
+    </section>
+    <div data-mail-legal></div>`,
   );
+  await renderMailAndLegalSettings($('[data-mail-legal]', content));
   refreshIcons(content);
   const form = content.querySelector('form') as HTMLFormElement;
   content.onclick = async (event) => {

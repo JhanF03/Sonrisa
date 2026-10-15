@@ -1,6 +1,7 @@
 /**
- * Registro de auditoría: quién hizo qué, cuándo y desde dónde.
- * Se usa para acciones sensibles (anulaciones, permisos, precios, accesos).
+ * Registro de auditoría: quién hizo qué, cuándo, desde dónde y, en las
+ * ediciones, qué valores cambiaron (antes → después).
+ * La base de datos impide editar o borrar estos registros (migración 0009).
  */
 import type { SqlDatabase, SqlStatement } from '../../db/database.js';
 import type { Actor } from '../../http/context.js';
@@ -22,7 +23,22 @@ export interface AuditLogRow {
   entity_id: string | null;
   details: string | null;
   ip: string | null;
+  user_agent: string | null;
   created_at: string;
+}
+
+/**
+ * Diferencias entre dos versiones de un registro: { campo: [antes, después] }.
+ * Solo incluye los campos que cambiaron (y nunca contraseñas ni secretos).
+ */
+export function diffFields(before: Record<string, unknown>, after: Record<string, unknown>, fields: readonly string[]): Record<string, [unknown, unknown]> {
+  const changes: Record<string, [unknown, unknown]> = {};
+  for (const field of fields) {
+    const previous = before[field] ?? null;
+    const next = after[field] ?? null;
+    if (JSON.stringify(previous) !== JSON.stringify(next)) changes[field] = [previous, next];
+  }
+  return changes;
 }
 
 export class AuditService {
@@ -32,8 +48,8 @@ export class AuditService {
   buildStatement(actor: Actor, entry: AuditEntry): SqlStatement {
     return this.db
       .prepare(
-        `INSERT INTO audit_log (id, tenant_id, user_id, action, entity, entity_id, details, ip, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO audit_log (id, tenant_id, user_id, action, entity, entity_id, details, ip, user_agent, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         crypto.randomUUID(),
@@ -44,6 +60,7 @@ export class AuditService {
         entry.entityId ?? null,
         entry.details ? JSON.stringify(entry.details) : null,
         actor.ip,
+        actor.userAgent ?? null,
         isoNow(),
       );
   }
@@ -55,7 +72,7 @@ export class AuditService {
   async list(tenantId: string, options: { limit: number; offset: number }): Promise<AuditLogRow[]> {
     const { results } = await this.db
       .prepare(
-        `SELECT a.id, a.user_id, u.full_name AS user_name, a.action, a.entity, a.entity_id, a.details, a.ip, a.created_at
+        `SELECT a.id, a.user_id, u.full_name AS user_name, a.action, a.entity, a.entity_id, a.details, a.ip, a.user_agent, a.created_at
          FROM audit_log a LEFT JOIN users u ON u.id = a.user_id
          WHERE a.tenant_id = ?
          ORDER BY a.created_at DESC

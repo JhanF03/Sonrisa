@@ -69,7 +69,7 @@ export class PlanService {
   }
 
   /** Guarda precios, límites y módulos. Los consultorios sin precio especial toman el precio nuevo. */
-  async saveCatalog(input: { plans: PlanDefinition[]; addons: AddonDefinition[]; annualFreeMonths: number }, ip: string): Promise<PlanCatalog> {
+  async saveCatalog(input: { plans: PlanDefinition[]; addons: AddonDefinition[]; annualFreeMonths: number }, source: { ip: string; adminId: string | null }): Promise<PlanCatalog> {
     const current = await this.getCatalog();
     for (const plan of input.plans) {
       if (!current.plans.some((existing) => existing.id === plan.id)) throw new AppError('Plan desconocido.', 422, 'UNKNOWN_PLAN');
@@ -88,8 +88,12 @@ export class PlanService {
       ),
       this.db.prepare('UPDATE platform_settings SET annual_free_months = ?, updated_at = ? WHERE id = 1').bind(input.annualFreeMonths, isoNow()),
       this.db
-        .prepare('INSERT INTO platform_audit (id, action, tenant_id, details, ip, created_at) VALUES (?, ?, NULL, ?, ?, ?)')
-        .bind(crypto.randomUUID(), 'planes_editados', JSON.stringify({ plans: input.plans.map((plan) => [plan.id, plan.monthlyPrice]) }), ip, isoNow()),
+        .prepare('INSERT INTO platform_audit (id, action, tenant_id, details, ip, admin_id, created_at) VALUES (?, ?, NULL, ?, ?, ?, ?)')
+        .bind(
+          crypto.randomUUID(), 'planes_editados',
+          JSON.stringify({ planes: input.plans.map((plan) => ({ id: plan.id, precio: plan.monthlyPrice, modulos: plan.modules, activo: plan.isActive })), adicionales: input.addons.map((addon) => [addon.id, addon.monthlyPrice]), anual: input.annualFreeMonths }),
+          source.ip, source.adminId, isoNow(),
+        ),
     ];
     await this.db.batch(statements);
 

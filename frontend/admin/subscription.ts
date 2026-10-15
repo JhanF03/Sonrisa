@@ -9,7 +9,10 @@ import { api } from '../core/api.js';
 import { logoTooth } from '../core/brand.js';
 import { html, safeUrl, setContent, type SafeHtml } from '../core/dom.js';
 import { addDays, formatLongDate, formatMoney, formatShortDate, formatUtcAsLocal } from '../core/format.js';
+import { openLicenseReceipt, receiptLabel } from '../core/licenseReceipt.js';
 import { planCard, priceSummary } from '../core/planCards.js';
+import { legalLinks } from '../public/legal.js';
+import { taxNotice, type LegalInfo } from '../../src/shared/legal.js';
 import { emptyState, icon, loadingState, refreshIcons, themeToggleButton, toast, withErrorToast } from '../core/ui.js';
 import { SUBSCRIPTION_LABELS, type SubscriptionStatus } from '../../src/shared/subscription.js';
 import {
@@ -39,7 +42,8 @@ interface SubscriptionView {
   ownerWhatsappUrl: string | null;
   onlinePaymentAvailable: boolean;
   paymentOptions: Array<{ months: number; amount: number }>;
-  payments: Array<{ id: string; amount: number; months: number; newPaidUntil: string; method: string; reference: string | null; status: string; createdAt: string; kind: string }>;
+  payments: Array<{ id: string; amount: number; months: number; newPaidUntil: string; method: string; reference: string | null; status: string; createdAt: string; kind: string; receiptNumber: number | null }>;
+  legal: LegalInfo;
 }
 
 const STATE_TONES: Record<SubscriptionStatus['state'], string> = {
@@ -237,14 +241,21 @@ export async function renderSubscriptionView(container: HTMLElement): Promise<vo
                 : html`Paga antes del vencimiento para no perder el acceso. Si pagas antes, el tiempo se suma a partir de la fecha actual de vencimiento.`}</p>
             ${stepsMarkup(view)}
           </section>`}
+      <section class="card card-padded" style="margin-top: 16px; display: grid; gap: 10px">
+        <p class="tax-notice">${icon('scale')}<span>${taxNotice(view.legal)}</span></p>
+        <nav class="legal-links" aria-label="Información legal">${legalLinks(true)}${view.legal.contactEmail ? html`<a href="mailto:${view.legal.contactEmail}">Consultas y reclamos: ${view.legal.contactEmail}</a>` : ''}</nav>
+      </section>
       <section class="card" style="margin-top: 16px">
         <div class="card-header"><h3>${icon('receipt')} Historial de pagos</h3></div>
         ${view.payments.length === 0
           ? emptyState('receipt', 'Sin pagos registrados', 'Aquí verás cada pago de la suscripción y hasta qué fecha cubrió.')
           : html`<div class="table-wrapper"><table class="data-table">
-            <thead><tr><th>Fecha</th><th>Concepto</th><th>Cubre hasta</th><th>Medio</th><th class="align-right">Valor</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Comprobante</th><th>Concepto</th><th>Cubre hasta</th><th>Medio</th><th class="align-right">Valor</th><th>Estado</th></tr></thead>
             <tbody>${view.payments.map((payment) => html`<tr class="${payment.status === 'anulado' ? 'is-muted' : ''}">
               <td>${formatUtcAsLocal(payment.createdAt, clinicOffset())}</td>
+              <td>${payment.receiptNumber
+                ? html`<button class="button button-ghost button-small" type="button" data-receipt="${payment.id}" data-tooltip="Ver, imprimir o guardar en PDF">${icon('receipt')} ${receiptLabel(payment.receiptNumber)}</button>`
+                : '—'}</td>
               <td>${payment.kind === 'cambio_plan' ? 'Cambio de plan' : payment.months === 1 ? '1 mes' : `${payment.months} meses`}</td>
               <td>${formatShortDate(payment.newPaidUntil)}</td>
               <td>${payment.method === 'wompi' ? 'En línea (Wompi)' : payment.method}</td><td class="align-right money">${formatMoney(payment.amount)}</td>
@@ -257,6 +268,8 @@ export async function renderSubscriptionView(container: HTMLElement): Promise<vo
   if (builder) mountPlanBuilder(builder, view, () => renderSubscriptionView(container));
   container.onclick = async (event) => {
     const target = event.target as HTMLElement;
+    const receiptId = target.closest<HTMLElement>('[data-receipt]')?.dataset.receipt;
+    if (receiptId) return void openLicenseReceipt(`/api/subscription/payments/${receiptId}/receipt`);
     const months = target.closest<HTMLElement>('[data-pay-months]')?.dataset.payMonths;
     if (months) await startOnlinePayment(Number(months));
     if (target.closest('[data-action="cancel-pending"]')) {

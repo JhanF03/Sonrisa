@@ -6,7 +6,7 @@ import { occupiesSlot } from '../../db/sqlFragments.js';
 import type { Actor } from '../../http/context.js';
 import { AppError, notFound } from '../../http/errors.js';
 import { isoNow } from '../../utils/time.js';
-import type { AuditService } from '../audit/auditService.js';
+import { diffFields, type AuditService } from '../audit/auditService.js';
 import type { PlanService } from '../plans/planService.js';
 
 export interface ProfessionalRow {
@@ -105,7 +105,18 @@ export class ProfessionalService {
            WHERE id = ? AND tenant_id = ?`,
         )
         .bind(input.fullName, input.specialty, input.color, input.userId, input.isActive ? 1 : 0, professionalId, actor.tenantId),
-      this.audit.buildStatement(actor, { action: 'profesional_actualizado', entity: 'profesional', entityId: professionalId }),
+      this.audit.buildStatement(actor, {
+        action: 'profesional_actualizado',
+        entity: 'profesional',
+        entityId: professionalId,
+        details: {
+          cambios: diffFields(
+            current as unknown as Record<string, unknown>,
+            { full_name: input.fullName, specialty: input.specialty, color: input.color, user_id: input.userId, is_active: input.isActive ? 1 : 0 },
+            ['full_name', 'specialty', 'color', 'user_id', 'is_active'],
+          ),
+        },
+      }),
     ]);
     return this.getById(actor.tenantId, professionalId);
   }

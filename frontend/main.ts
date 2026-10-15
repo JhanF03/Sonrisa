@@ -4,6 +4,7 @@
  *   /c/:consultorio/cita/:token   → gestión de cita del paciente
  *   /c/:consultorio/pago/:token   → resultado del pago con Wompi
  *   /registro                     → planes, demo de autoservicio y registro con prueba gratis
+ *   /legal/terminos · /legal/privacidad → términos del servicio y tratamiento de datos
  *   /plataforma                   → panel del dueño (página aparte: plataforma.html)
  *   /app (y cualquier otra)       → panel del consultorio
  */
@@ -11,6 +12,7 @@ import { startAdminApp } from './admin/shell.js';
 import { renderBookingPage } from './public/booking.js';
 import { renderManagePage } from './public/manage.js';
 import { renderPaymentResultPage } from './public/paymentResult.js';
+import { renderLegalPage } from './public/legal.js';
 import { renderSignupPage } from './public/signup.js';
 import { renderSubscriptionPaymentReturn } from './admin/subscription.js';
 
@@ -27,6 +29,8 @@ if (pathSegments[0] === 'c' && pathSegments[1] && pathSegments[2] === 'pago' && 
   void renderSubscriptionPaymentReturn(root);
 } else if (pathSegments[0] === 'registro' || pathSegments[0] === 'planes') {
   void renderSignupPage(root);
+} else if (pathSegments[0] === 'legal' && (pathSegments[1] === 'terminos' || pathSegments[1] === 'privacidad')) {
+  void renderLegalPage(root, pathSegments[1]);
 } else if (pathSegments[0] === 'plataforma') {
   // El panel del dueño es una aplicación aparte (plataforma.html).
   window.location.replace('/plataforma.html');

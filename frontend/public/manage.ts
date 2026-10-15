@@ -2,6 +2,7 @@
  * Página pública para que el paciente confirme, reprograme o cancele su cita
  * con el enlace firmado (/c/:slug/cita/:token).
  */
+import { applyFavicon } from '../core/favicon.js';
 import { api } from '../core/api.js';
 import { html, safeUrl, setContent } from '../core/dom.js';
 import { addDays, formatLongDate, formatShortDate, formatTime, STATUS_LABELS, todayLocal } from '../core/format.js';
@@ -9,7 +10,7 @@ import { applyBrandColor, icon, loadingState, refreshIcons, toast, withErrorToas
 import { publicLayout, type PublicSlot } from './booking.js';
 
 interface ManageData {
-  clinic: { name: string; slug: string; brandColor: string; logoUrl: string | null; phone: string | null; address: string | null; city: string | null };
+  clinic: { name: string; slug: string; brandColor: string; logoUrl: string | null; favicon?: string | null; phone: string | null; address: string | null; city: string | null };
   appointment: { startAt: string; endAt: string; status: string; serviceName: string; professionalName: string; patientFirstName: string; holdReason: string | null };
   verification?: { code: string; whatsappUrl: string | null } | null;
   paymentUrl?: string | null;
@@ -27,6 +28,7 @@ export async function renderManagePage(root: HTMLElement, token: string): Promis
     return;
   }
   applyBrandColor(data.clinic.brandColor);
+  applyFavicon(data.clinic.favicon);
   document.title = `Mi cita · ${data.clinic.name}`;
 
   let isRescheduling = false;

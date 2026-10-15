@@ -6,6 +6,7 @@ import { api } from '../../core/api.js';
 import { emptyToNull, html, readForm, safeUrl, setContent, type SafeHtml } from '../../core/dom.js';
 import { downloadExcel } from '../../core/excel.js';
 import { formatMoney, formatShortDate, formatUtcAsLocal, whatsappLink } from '../../core/format.js';
+import { openLicenseReceipt, receiptLabel } from '../../core/licenseReceipt.js';
 import { priceSummary } from '../../core/planCards.js';
 import { askReason, copyToClipboard, emptyState, icon, openFormModal, openModal, refreshIcons, toast, withErrorToast } from '../../core/ui.js';
 import { SUBSCRIPTION_LABELS, type SubscriptionStatus } from '../../../src/shared/subscription.js';
@@ -314,17 +315,30 @@ async function openHistoryModal(tenant: TenantOverview, onDone: () => Promise<vo
     content: payments.length === 0
       ? emptyState('receipt', 'Sin pagos', 'Aún no hay pagos registrados para este consultorio.')
       : html`<div class="table-wrapper"><table class="data-table">
-        <thead><tr><th>Fecha</th><th>Meses</th><th>Cubre hasta</th><th>Medio</th><th>Referencia</th><th class="align-right">Valor</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Comprobante</th><th>Meses</th><th>Cubre hasta</th><th>Medio</th><th>Referencia</th><th class="align-right">Valor</th><th>Estado</th><th></th></tr></thead>
         <tbody>${payments.map((payment, index) => html`<tr class="${payment.status === 'anulado' ? 'is-muted' : ''}">
-          <td>${formatUtcAsLocal(payment.created_at, OFFSET)}</td><td>${payment.kind === 'cambio_plan' ? 'Cambio de plan' : payment.months}</td><td>${formatShortDate(payment.new_paid_until)}</td>
+          <td>${formatUtcAsLocal(payment.created_at, OFFSET)}</td>
+          <td>${payment.receipt_number ? html`<button class="button button-ghost button-small" type="button" data-receipt="${payment.id}">${icon('receipt')} ${receiptLabel(payment.receipt_number)}</button>` : '—'}</td>
+          <td>${payment.kind === 'cambio_plan' ? 'Cambio de plan' : payment.months}</td><td>${formatShortDate(payment.new_paid_until)}</td>
           <td>${payment.method}</td><td>${payment.reference ?? '—'}</td><td class="align-right money">${formatMoney(payment.amount)}</td>
           <td>${payment.status === 'aprobado' ? html`<span class="badge badge-success">Aprobado</span>` : html`<span class="badge badge-neutral" data-tooltip="${payment.void_reason ?? ''}">Anulado</span>`}</td>
-          <td>${payment.status === 'aprobado' && index === payments.findIndex((row) => row.status === 'aprobado') ? html`<button class="icon-button" data-void="${payment.id}" aria-label="Anular" data-tooltip="Anular (solo el más reciente)">${icon('ban')}</button>` : ''}</td>
+          <td class="button-row" style="flex-wrap: nowrap">
+            ${payment.status === 'aprobado' && payment.receipt_number ? html`<button class="icon-button" data-resend="${payment.id}" aria-label="Reenviar comprobante" data-tooltip="Reenviar el comprobante por correo">${icon('send')}</button>` : ''}
+            ${payment.status === 'aprobado' && index === payments.findIndex((row) => row.status === 'aprobado') ? html`<button class="icon-button" data-void="${payment.id}" aria-label="Anular" data-tooltip="Anular (solo el más reciente)">${icon('ban')}</button>` : ''}</td>
         </tr>`)}</tbody></table></div>`,
   });
   refreshIcons(modal.body);
-  modal.body.addEventListener('click', (event) => {
-    const paymentId = (event.target as HTMLElement).closest<HTMLElement>('[data-void]')?.dataset.void;
+  modal.body.addEventListener('click', async (event) => {
+    const target = event.target as HTMLElement;
+    const receiptId = target.closest<HTMLElement>('[data-receipt]')?.dataset.receipt;
+    if (receiptId) return void openLicenseReceipt(`/api/platform/subscription-payments/${receiptId}/receipt`);
+    const resendId = target.closest<HTMLElement>('[data-resend]')?.dataset.resend;
+    if (resendId) {
+      const result = await withErrorToast(() => api.post<{ message: string }>(`/api/platform/subscription-payments/${resendId}/resend`));
+      if (result) toast(result.message, 'success');
+      return;
+    }
+    const paymentId = target.closest<HTMLElement>('[data-void]')?.dataset.void;
     if (!paymentId) return;
     askReason({
       title: 'Anular pago',

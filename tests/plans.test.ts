@@ -96,10 +96,10 @@ describe('Autogestión y planes (API)', () => {
   let demoCookie = '';
   let demoTenantId = '';
   it('crea una demo de autoservicio con datos que vence en 5 días', async () => {
-    const robot = await publicPost('/api/public/demo', { fullName: 'Robot', email: 'robot@spam.co', password: TEST_PASSWORD, website: 'http://spam' });
+    const robot = await publicPost('/api/public/demo', { acceptTerms: true, fullName: 'Robot', email: 'robot@spam.co', password: TEST_PASSWORD, website: 'http://spam' });
     assert.equal(robot.status, 400, 'El campo trampa detiene robots');
 
-    const demo = await publicPost('/api/public/demo', { fullName: 'Laura Gómez', email: 'laura@clinica.co', phone: '3001234567', password: TEST_PASSWORD, clinicName: 'Sonrisas Laura' });
+    const demo = await publicPost('/api/public/demo', { acceptTerms: true, fullName: 'Laura Gómez', email: 'laura@clinica.co', phone: '3001234567', password: TEST_PASSWORD, clinicName: 'Sonrisas Laura' });
     assert.equal(demo.status, 201, demo.text);
     assert.match(demo.json.loginEmail, /@vitrina\.agenda$/);
     demoCookie = cookieOf(demo);
@@ -112,7 +112,7 @@ describe('Autogestión y planes (API)', () => {
     assert.ok((await env.request('GET', '/api/patients', { cookie: demoCookie })).json.length > 0, 'Trae datos de ejemplo');
     assert.ok(await env.login(demo.json.loginEmail), 'Puede volver a entrar con su usuario de demo');
 
-    const again = await publicPost('/api/public/demo', { fullName: 'Laura Gómez', email: 'LAURA@clinica.co', password: TEST_PASSWORD });
+    const again = await publicPost('/api/public/demo', { acceptTerms: true, fullName: 'Laura Gómez', email: 'LAURA@clinica.co', password: TEST_PASSWORD });
     assert.equal(again.status, 409, 'Una demo activa por correo');
     demoTenantId = me.clinic.id;
     const row = await tenantRow(demoTenantId);
@@ -222,7 +222,7 @@ describe('Autogestión y planes (API)', () => {
   });
 
   it('una demo vencida se bloquea y el mantenimiento la borra con todos sus datos', async () => {
-    const demo = await publicPost('/api/public/demo', { fullName: 'Pedro Ruiz', email: 'pedro@clinica.co', password: TEST_PASSWORD });
+    const demo = await publicPost('/api/public/demo', { acceptTerms: true, fullName: 'Pedro Ruiz', email: 'pedro@clinica.co', password: TEST_PASSWORD });
     const cookie = cookieOf(demo);
     const tenantId = (await env.request('GET', '/api/auth/me', { cookie })).json.clinic.id as string;
     await env.db.prepare('UPDATE tenants SET demo_expires_at = ? WHERE id = ?').bind(new Date(Date.now() - 1000).toISOString(), tenantId).run();

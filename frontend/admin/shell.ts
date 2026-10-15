@@ -3,10 +3,12 @@
  * enrutador por hash (#/agenda, #/pacientes/123…).
  */
 import { logoTooth } from '../core/brand.js';
+import { applyFavicon } from '../core/favicon.js';
 import { api, setSuspendedHandler, setUnauthorizedHandler } from '../core/api.js';
 import { $, html, raw, readForm, safeUrl, setContent, type SafeHtml } from '../core/dom.js';
 import { applyBrandColor, icon, openFormModal, refreshIcons, themeToggleButton, toast } from '../core/ui.js';
-import { renderLogin } from './login.js';
+import { renderLogin, renderPasswordReset } from './login.js';
+import { legalLinks } from '../public/legal.js';
 import { can, loadSession, lockedByPlan, session } from './session.js';
 import { demoBanner, maybeShowDemoReminder } from './demoReminder.js';
 import { renderSubscriptionView, renderSuspendedScreen, subscriptionBanner } from './subscription.js';
@@ -65,6 +67,13 @@ export async function startAdminApp(root: HTMLElement): Promise<void> {
 
   if (window.location.pathname !== '/app') window.history.replaceState(null, '', `/app${window.location.hash}`);
 
+  // Enlace del correo "¿Olvidaste tu contraseña?": no necesita sesión.
+  const resetToken = window.location.hash.match(/^#\/restablecer\/([^/?#]+)/)?.[1];
+  if (resetToken) {
+    renderPasswordReset(root, decodeURIComponent(resetToken), () => void startAdminApp(root));
+    return;
+  }
+
   const sessionInfo = await loadSession();
   if (!sessionInfo) {
     renderLogin(root, () => void startAdminApp(root));
@@ -78,6 +87,7 @@ export async function startAdminApp(root: HTMLElement): Promise<void> {
     renderLogin(appRoot, () => void startAdminApp(appRoot));
   });
   applyBrandColor(sessionInfo.clinic.brandColor);
+  applyFavicon(sessionInfo.clinic.favicon);
 
   // Sin pago: en vez del panel se muestra cómo reactivar el acceso.
   const showSuspended = () =>
@@ -158,6 +168,7 @@ function renderShell(): void {
               <button class="button button-ghost button-small" type="button" data-action="change-password">${icon('key-round')} Clave</button>
               <button class="button button-ghost button-small" type="button" data-action="logout">${icon('log-out')} Salir</button>
             </div>
+            <nav class="legal-links sidebar-legal" aria-label="Información legal">${legalLinks(true)}</nav>
           </div>
         </aside>
         <div class="main">

@@ -4,6 +4,7 @@
  * Cada pestaña se muestra solo si el usuario tiene el permiso correspondiente.
  */
 import { api } from '../../core/api.js';
+import { applyFavicon, bindFaviconFields, faviconField } from '../../core/favicon.js';
 import { $, emptyToNull, html, readForm, safeUrl, setContent } from '../../core/dom.js';
 import { addDays, formatShortDate, formatTime, formatUtcAsLocal, todayLocal, whatsappLink } from '../../core/format.js';
 import { copyToClipboard, emptyState, icon, loadingState, openFormModal, refreshIcons, toast, withErrorToast } from '../../core/ui.js';
@@ -27,6 +28,7 @@ interface ClinicSettings {
   city: string | null;
   brand_color: string;
   logo_url: string | null;
+  favicon: string | null;
   slot_interval_minutes: number;
   min_booking_notice_hours: number;
   booking_window_days: number;
@@ -153,6 +155,7 @@ async function renderClinicTab(content: HTMLElement): Promise<void> {
           <label class="field"><span>Ciudad</span><input name="city" maxlength="80" value="${clinic.city ?? ''}" /></label>
           <label class="field"><span>${icon('palette')} Color de marca</span><input name="brandColor" type="color" value="${clinic.brand_color}" /></label>
           <label class="field"><span>Logo (URL https, opcional)</span><input name="logoUrl" type="url" maxlength="500" value="${clinic.logo_url ?? ''}" placeholder="https://…" /></label>
+          ${faviconField(clinic.favicon)}
           <label class="field"><span>Intervalo de horarios <span class="hint" data-tooltip="Cada cuánto se ofrecen horarios (ej. 8:00, 8:30, 9:00…)">${icon('info')}</span></span>
             <select name="slotIntervalMinutes">${[10, 15, 20, 30, 45, 60].map((minutes) => html`<option value="${minutes}" ${clinic.slot_interval_minutes === minutes ? 'selected' : ''}>${minutes} minutos</option>`)}</select></label>
           <label class="field"><span>Anticipación mínima (horas) <span class="hint" data-tooltip="Los pacientes no podrán reservar en línea con menos tiempo que este">${icon('info')}</span></span>
@@ -171,6 +174,14 @@ async function renderClinicTab(content: HTMLElement): Promise<void> {
   content.onclick = async (event) => {
     if ((event.target as HTMLElement).closest('[data-action="copy-link"]')) await copyToClipboard(bookingUrl, 'Enlace copiado.');
   };
+  // El ícono se guarda apenas se elige (no espera al botón Guardar).
+  bindFaviconFields(content, async (favicon) => {
+    const saved = await withErrorToast(() => api.put('/api/settings/favicon', { favicon }));
+    if (!saved) return;
+    if (favicon) applyFavicon(favicon);
+    toast(favicon ? 'Ícono de la pestaña actualizado.' : 'Ícono quitado: se usará el de Agenda Sonrisa al recargar.', 'success');
+  });
+  content.addEventListener('favicon-error', (event) => toast((event as CustomEvent<string>).detail, 'error'));
   content.onsubmit = async (event) => {
     const form = event.target as HTMLFormElement;
     event.preventDefault();

@@ -23,6 +23,7 @@ import {
   type TenantSubscriptionFields,
 } from '../../shared/subscription.js';
 import { ALL_PLAN_MODULES, MIN_ONLINE_CHARGE, parseModules, priceForMonths, prorateUpgrade, type PlanCatalog, type PlanModule, type PlanSelection } from '../../shared/plans.js';
+import { TERMS_VERSION, type LegalInfo, type TaxRegime } from '../../shared/legal.js';
 import { normalizePhone } from '../../utils/phone.js';
 import { parsePending, selectionOf, type PendingPlan, type PlanService } from '../plans/planService.js';
 import { isoNow, todayLocal } from '../../utils/time.js';
@@ -39,6 +40,13 @@ import {
 
 const COLOMBIA_OFFSET = -300;
 
+/** Quién hizo una acción en la plataforma: IP y, si fue desde el panel, la cuenta de dueño. */
+export type AuditSource = string | null | { ip: string; adminId: string | null };
+
+export function auditSourceParts(source: AuditSource): { ip: string | null; adminId: string | null } {
+  return source !== null && typeof source === 'object' ? { ip: source.ip, adminId: source.adminId } : { ip: source, adminId: null };
+}
+
 /** Después de crear su consultorio, la demo de donde vino sigue abierta este tiempo. */
 const DEMO_AFTER_SIGNUP_MS = 24 * 3_600_000;
 
@@ -53,6 +61,7 @@ export const TENANT_DATA_TABLES = [
   'payment_intents', 'payment_allocations', 'payments', 'charges',
   'waitlist_entries', 'appointments', 'time_blocks', 'schedules', 'patients', 'professionals', 'services',
   'sessions', 'audit_log', 'counters', 'payment_gateways', 'subscription_checkouts', 'subscription_payments',
+  'email_log', 'subscription_notices', 'password_resets',
 ] as const;
 const SUBSCRIPTION_REFERENCE_PREFIX = 'SUB-';
 
@@ -74,6 +83,18 @@ interface PlatformSettingsRow {
   self_signup_enabled: number;
   self_demo_enabled: number;
   max_self_demos: number;
+  legal_name: string | null;
+  legal_id: string | null;
+  legal_city: string | null;
+  legal_email: string | null;
+  tax_regime: TaxRegime;
+  uvt_value: number;
+  public_url: string | null;
+}
+
+export interface LegalSettingsView extends LegalInfo {
+  uvtValue: number;
+  publicUrl: string;
 }
 
 export interface PlatformSettingsView {
@@ -141,6 +162,7 @@ export interface SubscriptionPaymentRow {
   void_reason: string | null;
   created_at: string;
   kind: 'renovacion' | 'cambio_plan';
+  receipt_number: number | null;
 }
 
 const today = () => todayLocal(COLOMBIA_OFFSET);
@@ -156,20 +178,30 @@ export class PlatformService {
     private readonly plans: PlanService,
   ) {}
 
-  private auditStatement(action: string, tenantId: string | null, details: unknown, ip: string | null) {
+  /** Se llama tras cada pago aplicado (envía el comprobante y avisa al dueño). */
+  onPaymentRegistered: ((paymentId: string) => void) | null = null;
+
+  private auditStatement(action: string, tenantId: string | null, details: unknown, source: AuditSource) {
+    const { ip, adminId } = auditSourceParts(source);
     return this.db
-      .prepare('INSERT INTO platform_audit (id, action, tenant_id, details, ip, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .bind(crypto.randomUUID(), action, tenantId, details === null ? null : JSON.stringify(details), ip, isoNow());
+      .prepare('INSERT INTO platform_audit (id, action, tenant_id, details, ip, admin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(crypto.randomUUID(), action, tenantId, details === null ? null : JSON.stringify(details), ip, adminId, isoNow());
   }
 
-  async listAudit(limit = 200): Promise<Array<{ id: string; action: string; tenant_id: string | null; tenant_name: string | null; details: string | null; ip: string | null; created_at: string }>> {
+  /** Deja una acción en la bitácora de la plataforma. */
+  async recordAudit(action: string, tenantId: string | null, details: unknown, source: AuditSource): Promise<void> {
+    await this.auditStatement(action, tenantId, details, source).run();
+  }
+
+  async listAudit(limit = 300): Promise<Array<{ id: string; action: string; tenant_id: string | null; tenant_name: string | null; admin_name: string | null; details: string | null; ip: string | null; created_at: string }>> {
     const { results } = await this.db
       .prepare(
-        `SELECT a.id, a.action, a.tenant_id, t.name AS tenant_name, a.details, a.ip, a.created_at
-         FROM platform_audit a LEFT JOIN tenants t ON t.id = a.tenant_id ORDER BY a.created_at DESC LIMIT ?`,
+        `SELECT a.id, a.action, a.tenant_id, t.name AS tenant_name, pa.full_name AS admin_name, a.details, a.ip, a.created_at
+         FROM platform_audit a LEFT JOIN tenants t ON t.id = a.tenant_id LEFT JOIN platform_admins pa ON pa.id = a.admin_id
+         ORDER BY a.created_at DESC LIMIT ?`,
       )
       .bind(limit)
-      .all<{ id: string; action: string; tenant_id: string | null; tenant_name: string | null; details: string | null; ip: string | null; created_at: string }>();
+      .all<{ id: string; action: string; tenant_id: string | null; tenant_name: string | null; admin_name: string | null; details: string | null; ip: string | null; created_at: string }>();
     return results;
   }
 
@@ -226,7 +258,7 @@ export class PlatformService {
       selfDemoEnabled?: boolean;
       maxSelfDemos?: number;
     },
-    ip: string,
+    ip: AuditSource,
   ): Promise<PlatformSettingsView> {
     const current = await this.getSettingsRow();
     const [currentIntegrity, currentEvents] = await this.decryptWompiSecrets(current);
@@ -281,6 +313,48 @@ export class PlatformService {
     const merchant = await this.wompi.getMerchant(row.wompi_environment, row.wompi_public_key).catch(() => null);
     if (!merchant) throw new AppError('Wompi no reconoce la llave pública en ese ambiente.', 422, 'WOMPI_INVALID');
     return { message: `Conectado con el comercio "${merchant.name}".` };
+  }
+
+  // ─── Datos legales y tributarios ──────────────────────────────────────────
+
+  async getLegalSettings(): Promise<LegalSettingsView> {
+    const row = await this.getSettingsRow();
+    return {
+      providerName: row.legal_name || row.owner_name || '',
+      providerId: row.legal_id ?? '',
+      city: row.legal_city ?? '',
+      contactEmail: row.legal_email ?? '',
+      whatsapp: row.owner_whatsapp ?? '',
+      taxRegime: row.tax_regime,
+      termsVersion: TERMS_VERSION,
+      uvtValue: row.uvt_value,
+      publicUrl: row.public_url ?? '',
+    };
+  }
+
+  /** Lo que se publica en los términos, la política de datos y los comprobantes. */
+  async getLegalInfo(): Promise<LegalInfo> {
+    const { uvtValue: _uvt, publicUrl: _url, ...info } = await this.getLegalSettings();
+    return info;
+  }
+
+  async saveLegalSettings(
+    input: { legalName: string | null; legalId: string | null; legalCity: string | null; legalEmail: string | null; taxRegime: TaxRegime; uvtValue: number; publicUrl: string | null },
+    source: AuditSource,
+  ): Promise<LegalSettingsView> {
+    await this.db.batch([
+      this.db
+        .prepare('UPDATE platform_settings SET legal_name = ?, legal_id = ?, legal_city = ?, legal_email = ?, tax_regime = ?, uvt_value = ?, public_url = ?, updated_at = ? WHERE id = 1')
+        .bind(input.legalName, input.legalId, input.legalCity, input.legalEmail?.toLowerCase() ?? null, input.taxRegime, input.uvtValue, input.publicUrl?.replace(/\/+$/, '') ?? null, isoNow()),
+      this.auditStatement('datos_legales', null, { taxRegime: input.taxRegime, uvtValue: input.uvtValue }, source),
+    ]);
+    return this.getLegalSettings();
+  }
+
+  /** Dirección pública para los enlaces de los correos (la configurada o la de la petición). */
+  async publicUrl(requestOrigin?: string | null): Promise<string> {
+    const row = await this.getSettingsRow();
+    return row.public_url || requestOrigin || '';
   }
 
   // ─── Consultorios ─────────────────────────────────────────────────────────
@@ -339,7 +413,14 @@ export class PlatformService {
   async getSummary(): Promise<{
     realClinics: number; demos: number; active: number; dueSoon: number; inGrace: number; suspended: number; monthlyRecurring: number; collectedThisMonth: number;
     trials: number; selfDemos: number; conversions: number; byPlan: Record<string, number>;
+    yearCollected: number; ivaThreshold: number; taxRegime: TaxRegime;
   }> {
+    const settings = await this.getSettingsRow();
+    const yearStart = new Date(`${today().slice(0, 4)}-01-01T05:00:00Z`).toISOString();
+    const yearTotal = await this.db
+      .prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM subscription_payments WHERE status = 'aprobado' AND created_at >= ?")
+      .bind(yearStart)
+      .first<{ total: number }>();
     const tenants = await this.listTenants();
     const real = tenants.filter((tenant) => !tenant.isShowcase);
     const monthStart = `${today().slice(0, 8)}01`;
@@ -360,6 +441,9 @@ export class PlatformService {
       selfDemos: tenants.filter((tenant) => tenant.isShowcase && tenant.signupSource === 'autoservicio').length,
       conversions: tenants.filter((tenant) => tenant.isShowcase && tenant.convertedTenantId).length + real.filter((tenant) => tenant.signupSource === 'registro').length,
       byPlan: real.reduce<Record<string, number>>((counts, tenant) => ({ ...counts, [tenant.planId]: (counts[tenant.planId] ?? 0) + 1 }), {}),
+      yearCollected: yearTotal?.total ?? 0,
+      ivaThreshold: 3500 * settings.uvt_value,
+      taxRegime: settings.tax_regime,
     };
   }
 
@@ -385,7 +469,7 @@ export class PlatformService {
       paidUntil: string | null;
       ownerNotes: string | null;
     },
-    ip: string,
+    ip: AuditSource,
   ): Promise<TenantOverview> {
     const tenant = await this.getTenant(tenantId);
     if (tenant.is_showcase === 1) throw new AppError('Las demos no tienen suscripción.', 422, 'SHOWCASE');
@@ -422,7 +506,7 @@ export class PlatformService {
   async registerPayment(
     tenantId: string,
     input: { amount: number; months: number; method: string; reference: string | null; notes: string | null; externalId?: string | null; kind?: 'renovacion' | 'cambio_plan' },
-    ip: string | null,
+    ip: AuditSource,
   ): Promise<{ applied: boolean; paidUntil: string }> {
     for (let attempt = 0; attempt < 3; attempt++) {
       const tenant = await this.getTenant(tenantId);
@@ -436,13 +520,16 @@ export class PlatformService {
         outcome = await this.db.batch([
           this.db
             .prepare(
-              `INSERT INTO subscription_payments (id, tenant_id, amount, months, previous_paid_until, new_paid_until, method, reference, external_id, notes, created_at, kind)
-               SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE (SELECT paid_until FROM tenants WHERE id = ?) IS ?`,
+              `INSERT INTO subscription_payments (id, tenant_id, amount, months, previous_paid_until, new_paid_until, method, reference, external_id, notes, created_at, kind, receipt_number)
+               SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT receipt_counter + 1 FROM platform_settings WHERE id = 1)
+               WHERE (SELECT paid_until FROM tenants WHERE id = ?) IS ?`,
             )
             .bind(
               paymentId, tenantId, input.amount, input.months, previous, next, input.method, input.reference, input.externalId ?? null, input.notes, isoNow(),
               input.kind ?? 'renovacion', tenantId, previous,
             ),
+          // Consecutivo de comprobantes: solo avanza si el pago quedó guardado (sin saltos).
+          this.db.prepare('UPDATE platform_settings SET receipt_counter = receipt_counter + 1 WHERE id = 1 AND EXISTS (SELECT 1 FROM subscription_payments WHERE id = ?)').bind(paymentId),
           // El primer pago termina el periodo de prueba.
           this.db.prepare('UPDATE tenants SET paid_until = ?, on_trial = 0 WHERE id = ? AND paid_until IS ?').bind(next, tenantId, previous),
           // Si estaba suspendido manualmente por falta de pago, el pago lo reactiva.
@@ -455,13 +542,50 @@ export class PlatformService {
         }
         throw error;
       }
-      if ((outcome[0]?.meta?.changes ?? 0) > 0) return { applied: true, paidUntil: next };
+      if ((outcome[0]?.meta?.changes ?? 0) > 0) {
+        this.onPaymentRegistered?.(paymentId);
+        return { applied: true, paidUntil: next };
+      }
     }
     throw new AppError('Hubo varios pagos al mismo tiempo. Intenta de nuevo.', 409, 'CONCURRENT_PAYMENT');
   }
 
+  /** Datos del comprobante de un pago (si tenantId viene, solo de ese consultorio). */
+  async getReceipt(paymentId: string, tenantId: string | null = null) {
+    const payment = await this.db.prepare('SELECT * FROM subscription_payments WHERE id = ?').bind(paymentId).first<SubscriptionPaymentRow>();
+    if (!payment || (tenantId && payment.tenant_id !== tenantId)) throw notFound('El pago');
+    const tenant = await this.getTenant(payment.tenant_id);
+    const admin = await this.db
+      .prepare(
+        `SELECT u.email, u.full_name FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN roles r ON r.id = ur.role_id
+         WHERE u.tenant_id = ? AND r.is_system = 1 AND u.is_active = 1 ORDER BY u.created_at LIMIT 1`,
+      )
+      .bind(tenant.id)
+      .first<{ email: string; full_name: string }>();
+    const plan = (await this.plans.getCatalog()).plans.find((candidate) => candidate.id === tenant.plan_id);
+    const legal = await this.getLegalInfo();
+    const concept = payment.kind === 'cambio_plan'
+      ? `Cambio al plan ${plan?.name ?? tenant.plan_id} de Agenda Sonrisa (diferencia de los días restantes)`
+      : `Licencia de uso de Agenda Sonrisa, plan ${plan?.name ?? tenant.plan_id}, ${payment.months === 12 ? '12 meses' : payment.months === 1 ? '1 mes' : `${payment.months} meses`}`;
+    return {
+      id: payment.id,
+      number: payment.receipt_number,
+      createdAt: payment.created_at,
+      status: payment.status,
+      voidReason: payment.void_reason,
+      amount: payment.amount,
+      method: payment.method,
+      reference: payment.reference,
+      concept,
+      periodFrom: payment.kind === 'cambio_plan' || !payment.previous_paid_until ? null : addDaysToDate(payment.previous_paid_until, 1),
+      paidUntil: payment.new_paid_until,
+      customer: { clinicName: tenant.name, contactName: admin?.full_name ?? null, email: admin?.email ?? tenant.contact_email, city: tenant.city },
+      provider: legal,
+    };
+  }
+
   /** Solo se anula el pago más reciente (devuelve paid_until al valor anterior). */
-  async voidPayment(paymentId: string, reason: string, ip: string): Promise<void> {
+  async voidPayment(paymentId: string, reason: string, ip: AuditSource): Promise<void> {
     const payment = await this.db.prepare('SELECT * FROM subscription_payments WHERE id = ?').bind(paymentId).first<SubscriptionPaymentRow>();
     if (!payment) throw notFound('El pago');
     if (payment.status !== 'aprobado') throw new AppError('El pago ya está anulado.', 409, 'ALREADY_VOIDED');
@@ -481,12 +605,12 @@ export class PlatformService {
    * Abre el panel de una DEMO como su administrador (para mostrarla o revisarla).
    * Solo demos: los consultorios reales tienen datos de pacientes reales.
    */
-  async createDemoSession(tenantId: string, ip: string, userAgent: string): Promise<{ token: string; expiresAt: number }> {
+  async createDemoSession(tenantId: string, ip: string, userAgent: string, adminId: string | null = null): Promise<{ token: string; expiresAt: number }> {
     const tenant = await this.getTenant(tenantId);
     if (tenant.is_showcase !== 1) throw new AppError('Solo se puede abrir el panel de las demos.', 403, 'NOT_SHOWCASE');
-    const adminId = await this.firstAdminId(tenantId);
-    if (!adminId) throw new AppError('La demo no tiene un administrador activo.', 409, 'NO_ADMIN');
-    return this.issueSession(adminId, tenantId, ip, userAgent, 'demo_abierta');
+    const demoAdminId = await this.firstAdminId(tenantId);
+    if (!demoAdminId) throw new AppError('La demo no tiene un administrador activo.', 409, 'NO_ADMIN');
+    return this.issueSession(demoAdminId, tenantId, ip, userAgent, 'demo_abierta', { ip, adminId });
   }
 
   private async firstAdminId(tenantId: string): Promise<string | null> {
@@ -501,7 +625,9 @@ export class PlatformService {
   }
 
   /** Sesión normal del panel del consultorio (misma cookie que al ingresar con contraseña). */
-  private async issueSession(userId: string, tenantId: string, ip: string, userAgent: string, auditAction: string): Promise<{ token: string; expiresAt: number }> {
+  private async issueSession(
+    userId: string, tenantId: string, ip: string, userAgent: string, auditAction: string, auditSource: AuditSource = ip,
+  ): Promise<{ token: string; expiresAt: number }> {
     const token = generateSecureToken(32);
     const expiresAt = Date.now() + this.config.sessionTtlHours * 3_600_000;
     await this.db.batch([
@@ -509,7 +635,7 @@ export class PlatformService {
         .prepare('INSERT INTO sessions (token_hash, user_id, tenant_id, expires_at, created_at, ip, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)')
         .bind(await sha256Hex(token), userId, tenantId, expiresAt, isoNow(), ip, userAgent.slice(0, 300)),
       this.db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').bind(isoNow(), userId),
-      this.auditStatement(auditAction, tenantId, null, ip),
+      this.auditStatement(auditAction, tenantId, null, auditSource),
     ]);
     return { token, expiresAt };
   }
@@ -517,7 +643,7 @@ export class PlatformService {
   // ─── Demos: vencimiento y borrado ─────────────────────────────────────────
 
   /** Borra una demo con todos sus datos (ficticios). Nunca borra un consultorio real. */
-  async deleteDemo(tenantId: string, ip: string | null, reason: 'dueno' | 'vencida'): Promise<void> {
+  async deleteDemo(tenantId: string, ip: AuditSource, reason: 'dueno' | 'vencida'): Promise<void> {
     const tenant = await this.getTenant(tenantId);
     if (tenant.is_showcase !== 1) throw new AppError('Solo se pueden eliminar demos. Un consultorio real se suspende, no se borra.', 403, 'NOT_SHOWCASE');
     await this.db.batch([
@@ -532,7 +658,7 @@ export class PlatformService {
   }
 
   /** Cambia el vencimiento de una demo (null = no vence). */
-  async setDemoExpiry(tenantId: string, expiresAt: string | null, ip: string): Promise<TenantOverview> {
+  async setDemoExpiry(tenantId: string, expiresAt: string | null, ip: AuditSource): Promise<TenantOverview> {
     const tenant = await this.getTenant(tenantId);
     if (tenant.is_showcase !== 1) throw new AppError('Solo las demos vencen.', 403, 'NOT_SHOWCASE');
     await this.db.batch([
@@ -622,8 +748,11 @@ export class PlatformService {
     const expiresAt = new Date(Date.now() + demoDays * 86_400_000).toISOString();
     await this.db.batch([
       this.db
-        .prepare("UPDATE tenants SET signup_source = 'autoservicio', demo_expires_at = ?, contact_name = ?, contact_email = ?, contact_phone = ? WHERE id = ? AND is_showcase = 1")
-        .bind(expiresAt, contact.name, contact.email.toLowerCase(), contact.phone, tenantId),
+        .prepare(
+          `UPDATE tenants SET signup_source = 'autoservicio', demo_expires_at = ?, contact_name = ?, contact_email = ?, contact_phone = ?,
+             terms_version = ?, terms_accepted_at = ?, terms_accepted_ip = ? WHERE id = ? AND is_showcase = 1`,
+        )
+        .bind(expiresAt, contact.name, contact.email.toLowerCase(), contact.phone, TERMS_VERSION, isoNow(), ip, tenantId),
       this.auditStatement('demo_autoservicio', tenantId, { email: contact.email }, ip),
     ]);
     return expiresAt;
@@ -650,8 +779,11 @@ export class PlatformService {
     await this.db.batch([
       this.plans.applyStatement({ id: tenantId, custom_price: null }, resolved),
       this.db
-        .prepare("UPDATE tenants SET on_trial = 1, signup_source = 'registro', contact_name = ?, contact_email = ?, contact_phone = ? WHERE id = ?")
-        .bind(contact.name, contact.email.toLowerCase(), contact.phone, tenantId),
+        .prepare(
+          `UPDATE tenants SET on_trial = 1, signup_source = 'registro', contact_name = ?, contact_email = ?, contact_phone = ?,
+             terms_version = ?, terms_accepted_at = ?, terms_accepted_ip = ? WHERE id = ?`,
+        )
+        .bind(contact.name, contact.email.toLowerCase(), contact.phone, TERMS_VERSION, isoNow(), ip, tenantId),
       // La demo de donde vino sigue disponible solo 24 horas más.
       ...(fromDemoTenantId
         ? [
@@ -677,7 +809,7 @@ export class PlatformService {
   }
 
   /** Restablece la contraseña del primer administrador activo y cierra sus sesiones. */
-  async resetAdminPassword(tenantId: string, ip: string): Promise<{ email: string; temporaryPassword: string }> {
+  async resetAdminPassword(tenantId: string, ip: AuditSource): Promise<{ email: string; temporaryPassword: string }> {
     await this.getTenant(tenantId);
     const admin = await this.db
       .prepare(
@@ -704,7 +836,7 @@ export class PlatformService {
     ]);
   }
 
-  async auditClinicCreated(tenantId: string, kind: 'real' | 'demo', ip: string): Promise<void> {
+  async auditClinicCreated(tenantId: string, kind: 'real' | 'demo', ip: AuditSource): Promise<void> {
     await this.auditStatement(kind === 'real' ? 'consultorio_creado' : 'demo_creada', tenantId, null, ip).run();
   }
 
@@ -742,8 +874,10 @@ export class PlatformService {
         ? (await this.listPayments(tenant.id)).map((payment) => ({
             id: payment.id, amount: payment.amount, months: payment.months, newPaidUntil: payment.new_paid_until, method: payment.method,
             reference: payment.reference, status: payment.status, createdAt: payment.created_at, kind: payment.kind,
+            receiptNumber: payment.receipt_number,
           }))
         : [],
+      legal: await this.getLegalInfo(),
     };
   }
 

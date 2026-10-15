@@ -5,6 +5,8 @@
  *  • Consultorio real con prueba gratis y el plan elegido (POST /api/public/signup).
  *    Si se crea desde una demo, la demo sigue abierta solo 24 horas más.
  *  • Cambio de plan desde el panel del consultorio (POST /api/subscription/plan).
+ *  • Correos automáticos: bienvenida, datos de la demo y aviso al dueño.
+ *  • Textos legales públicos (GET /api/public/legal) para /legal/terminos y /legal/privacidad.
  *
  * Protecciones: límite de intentos por IP, campo trampa para robots,
  * Cloudflare Turnstile si está configurado y un cupo de demos activas.
@@ -15,12 +17,13 @@ import { z } from 'zod';
 import { seedDemoData } from '../../modules/platform/demoDataService.js';
 import { generateSecureToken } from '../../security/crypto.js';
 import type { RateLimitRule } from '../../security/rateLimiter.js';
+import { taxNotice } from '../../shared/legal.js';
 import { ALL_PLAN_MODULES, MAX_EXTRA_SEATS } from '../../shared/plans.js';
 import { requireAuth, type AppContext, type AppEnv } from '../context.js';
 import { AppError } from '../errors.js';
 import { getSessionCookieName } from '../middleware.js';
 import { defineRoutes, publicAccess, requiresAny } from '../routeRegistry.js';
-import { optionalText, readJsonBody, requiredText } from '../validation.js';
+import { faviconSchema, optionalText, readJsonBody, requiredText } from '../validation.js';
 import { PASSWORD_POLICY } from './authRoutes.js';
 
 export const planSelectionSchema = z.object({
@@ -62,6 +65,15 @@ export function registerSelfServiceRoutes(app: Hono<AppEnv>): void {
   defineRoutes(app, [
     {
       method: 'GET',
+      path: '/api/public/legal',
+      access: publicAccess,
+      handler: async (context) => {
+        const legal = await context.get('services').platform.getLegalInfo();
+        return context.json({ ...legal, taxNotice: taxNotice(legal) });
+      },
+    },
+    {
+      method: 'GET',
       path: '/api/public/offer',
       access: publicAccess,
       handler: async (context) => {
@@ -84,7 +96,10 @@ export function registerSelfServiceRoutes(app: Hono<AppEnv>): void {
       handler: async (context) => {
         const services = context.get('services');
         const clientIp = context.get('clientIp');
-        const input = await readJsonBody(context, z.object({ ...contactSchema, clinicName: optionalText(120) }));
+        const input = await readJsonBody(
+          context,
+          z.object({ ...contactSchema, clinicName: optionalText(120), acceptTerms: z.literal(true, { error: 'Debes aceptar los términos y la política de datos.' }) }),
+        );
         assertNotRobot(input.website);
         await services.turnstile.assertHuman(input.turnstileToken, clientIp);
         const { demoDays } = await services.platform.assertSelfDemoAllowed(input.email);
@@ -99,6 +114,12 @@ export function registerSelfServiceRoutes(app: Hono<AppEnv>): void {
         await seedDemoData(context.get('db'), tenantId, tenant.utc_offset_minutes, adminUserId);
         const expiresAt = await services.platform.markSelfDemo(tenantId, { name: input.fullName, email: input.email, phone: input.phone }, demoDays, clientIp);
         setClinicSessionCookie(context, await services.platform.openSelfDemo(tenantId, adminUserId, clientIp, context.req.header('User-Agent') ?? ''));
+        services.mail.queue(
+          services.notifications.demoCreated(
+            { tenantId, name: input.fullName, contactEmail: input.email, phone: input.phone, loginEmail, expiresAt },
+            new URL(context.req.url).origin,
+          ),
+        );
         return context.json({ panelUrl: '/app', loginEmail, expiresAt, demoDays }, 201);
       },
     },
@@ -116,6 +137,7 @@ export function registerSelfServiceRoutes(app: Hono<AppEnv>): void {
             clinicName: requiredText(120, 'El nombre del consultorio'),
             city: optionalText(80),
             planId: z.string().min(1).max(40),
+            favicon: faviconSchema.nullable().optional(),
             acceptTerms: z.literal(true, { error: 'Debes aceptar los términos y la política de datos.' }),
           }),
         );
@@ -126,14 +148,23 @@ export function registerSelfServiceRoutes(app: Hono<AppEnv>): void {
 
         const auth = context.get('auth');
         const fromDemo = auth?.tenant.is_showcase === 1 && auth.tenant.signup_source === 'autoservicio' ? auth.tenant : null;
-        const { tenantId, adminUserId } = await services.tenants.createTenant(
-          { name: input.clinicName, city: input.city, phone: input.phone, paidUntil: trialUntil, monthlyPrice: resolved.monthlyPrice, graceDays },
-          { fullName: input.fullName, email: input.email, passwordHash: await services.auth.hashNewPassword(input.password) },
-        );
+        const { tenantId, adminUserId } = await services.tenants
+          .createTenant(
+            { name: input.clinicName, city: input.city, phone: input.phone, paidUntil: trialUntil, monthlyPrice: resolved.monthlyPrice, graceDays, favicon: input.favicon ?? null },
+            { fullName: input.fullName, email: input.email, passwordHash: await services.auth.hashNewPassword(input.password) },
+          )
+          .catch((error: unknown) => {
+            // Mensaje neutro: no confirma a un extraño qué correos tienen cuenta.
+            if (error instanceof AppError && error.statusCode === 409) {
+              throw new AppError('No pudimos crear la cuenta con ese correo. Si ya tienes una, ingresa con ella; si no, usa otro correo.', 409, 'SIGNUP_UNAVAILABLE');
+            }
+            throw error;
+          });
         const result = await services.platform.completeSelfSignup(
           tenantId, adminUserId, resolved, { name: input.fullName, email: input.email, phone: input.phone }, fromDemo?.id ?? null, clientIp, context.req.header('User-Agent') ?? '',
         );
         setClinicSessionCookie(context, result);
+        services.mail.queue(services.notifications.welcome(tenantId, resolved.plan.name, new URL(context.req.url).origin));
         return context.json(
           { panelUrl: '/app', trialUntil, demoAvailableUntil: result.demoAvailableUntil, demoLoginEmail: fromDemo && result.demoAvailableUntil ? auth?.email : null },
           201,

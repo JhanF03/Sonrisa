@@ -48,6 +48,42 @@ export interface Summary {
   selfDemos: number;
   conversions: number;
   byPlan: Record<string, number>;
+  /** Recaudado en el año calendario (para el tope de IVA). */
+  yearCollected: number;
+  /** 3.500 UVT en pesos: si los ingresos del año lo superan, se vuelve responsable de IVA. */
+  ivaThreshold: number;
+  taxRegime: 'no_responsable_iva' | 'responsable_iva';
+}
+
+export interface MailSettings {
+  smtpUser: string;
+  smtpFromName: string;
+  maskedPassword: string | null;
+  configured: boolean;
+  notifyOwner: boolean;
+}
+
+export interface LegalSettings {
+  providerName: string;
+  providerId: string;
+  city: string;
+  contactEmail: string;
+  whatsapp: string;
+  taxRegime: 'no_responsable_iva' | 'responsable_iva';
+  termsVersion: string;
+  uvtValue: number;
+  publicUrl: string;
+}
+
+export interface EmailLogRow {
+  id: string;
+  kind: string;
+  recipient: string;
+  subject: string;
+  status: 'enviado' | 'fallido' | 'omitido';
+  error: string | null;
+  created_at: string;
+  tenant_name: string | null;
 }
 
 export interface PlatformSettings {
@@ -82,6 +118,7 @@ export interface PaymentRow {
   void_reason: string | null;
   created_at: string;
   kind: 'renovacion' | 'cambio_plan';
+  receipt_number: number | null;
 }
 
 export interface PlatformAdmin {

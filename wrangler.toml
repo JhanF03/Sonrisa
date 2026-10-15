@@ -30,9 +30,10 @@ SESSION_TTL_HOURS = "12"
 #   npx wrangler secret put APP_SECRET
 #   npx wrangler secret put PLATFORM_ADMIN_KEY
 
-# Tarea de mantenimiento cada 10 minutos (el plan gratuito permite 5 por cuenta).
+# Mantenimiento cada 10 minutos y recordatorios por correo cada hora (minuto 7).
+# El plan gratuito permite 5 por cuenta. Si cambias el segundo, cámbialo también en src/worker.ts.
 [triggers]
-crons = ["*/10 * * * *"]
+crons = ["*/10 * * * *", "7 * * * *"]
 
 # Opcional: Cloudflare Turnstile (anti-robots gratis). Configúralo con:
 #   npx wrangler secret put TURNSTILE_SITE_KEY

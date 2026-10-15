@@ -3,6 +3,7 @@
  * Flujo en 4 pasos: servicio → profesional → día y hora → datos.
  */
 import { logoTooth } from '../core/brand.js';
+import { applyFavicon } from '../core/favicon.js';
 import { api, ApiError } from '../core/api.js';
 import { $, html, readForm, safeUrl, setContent, type SafeHtml } from '../core/dom.js';
 import { addDays, DOCUMENT_TYPES, formatLongDate, formatMoney, formatShortDate, formatTime, todayLocal } from '../core/format.js';
@@ -12,7 +13,7 @@ export interface PublicClinic {
   name: string;
   slug: string;
   brandColor: string;
-  logoUrl: string | null;
+  logoUrl: string | null; favicon?: string | null;
   phone: string | null;
   whatsappNumber: string | null;
   address: string | null;
@@ -55,6 +56,7 @@ export async function renderBookingPage(root: HTMLElement, slug: string): Promis
   }
 
   applyBrandColor(clinic.brandColor);
+  applyFavicon(clinic.favicon);
   document.title = `Reservar cita · ${clinic.name}`;
   const state: BookingState = {};
 

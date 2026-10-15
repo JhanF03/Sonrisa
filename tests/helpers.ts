@@ -7,6 +7,7 @@ import { buildConfig, createApp } from '../src/app.js';
 import { NodeSqliteDatabase } from '../src/db/nodeSqliteDatabase.js';
 import { CSRF_HEADER, CSRF_HEADER_VALUE } from '../src/http/middleware.js';
 import { AuditService } from '../src/modules/audit/auditService.js';
+import type { OpenSocket } from '../src/modules/mail/smtpClient.js';
 import { TenantService } from '../src/modules/tenants/tenantService.js';
 import { hashPassword } from '../src/security/crypto.js';
 import { isColombianHoliday } from '../src/utils/colombianHolidays.js';
@@ -28,6 +29,8 @@ export interface TestEnvironmentOptions {
   /** Simula las APIs externas (Wompi, Turnstile). Por defecto, cualquier llamada falla. */
   fetch?: typeof fetch;
   turnstile?: { siteKey: string; secretKey: string };
+  /** Simula el servidor de correo (Gmail). Sin esto, los correos quedan "omitidos". */
+  openSocket?: OpenSocket;
 }
 
 const unexpectedFetch: typeof fetch = async (input) => {
@@ -52,7 +55,7 @@ export async function createTestEnvironment(options: TestEnvironmentOptions = {}
     TURNSTILE_SITE_KEY: options.turnstile?.siteKey,
     TURNSTILE_SECRET_KEY: options.turnstile?.secretKey,
   });
-  const app = createApp(db, config, { fetch: options.fetch ?? unexpectedFetch });
+  const app = createApp(db, config, { fetch: options.fetch ?? unexpectedFetch, openSocket: options.openSocket });
   const passwordHash = await hashPassword(TEST_PASSWORD, 1000);
   const tenantService = new TenantService(db, new AuditService(db));
 

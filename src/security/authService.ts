@@ -171,6 +171,14 @@ export class AuthService {
     await this.db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await sha256Hex(sessionToken)).run();
   }
 
+  /** Cierra las sesiones del usuario en otros dispositivos y conserva la actual. */
+  async revokeOtherSessions(userId: string, currentSessionToken: string): Promise<void> {
+    await this.db
+      .prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?')
+      .bind(userId, await sha256Hex(currentSessionToken))
+      .run();
+  }
+
   /** Cierra todas las sesiones de un usuario (al desactivarlo o cambiar su clave). */
   async revokeUserSessions(userId: string): Promise<void> {
     await this.db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId).run();

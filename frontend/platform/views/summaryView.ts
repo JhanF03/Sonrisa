@@ -30,6 +30,7 @@ export async function renderSummaryView(content: HTMLElement): Promise<void> {
         ${kpi('gift', String(summary.trials), 'En prueba gratis', 'is-info')}
         ${kpi('rocket', `${summary.selfDemos} · ${summary.conversions}`, 'Demos de autoservicio · registros', 'is-info')}
       </div></section>
+      ${ivaMeter(summary)}
       <section class="card card-padded" style="margin-top: 16px">
         <h3>${icon('link')} Tu página de planes y registro <span class="hint" data-tooltip="Compártela en tu web, redes o WhatsApp. Ahí los interesados ven precios, crean su demo o su consultorio con prueba gratis y pagan solos.">${icon('info')}</span></h3>
         <div class="secret-row"><code>${signupUrl}</code>
@@ -49,3 +50,19 @@ export async function renderSummaryView(content: HTMLElement): Promise<void> {
   content.querySelector('[data-copy-signup]')?.addEventListener('click', () => void copyToClipboard(signupUrl, 'Enlace copiado.'));
 }
 
+
+/**
+ * Ingresos del año frente al tope de 3.500 UVT (art. 437 del Estatuto Tributario).
+ * Si se supera, desde el periodo siguiente se es responsable de IVA y se debe facturar.
+ */
+function ivaMeter(summary: Summary): SafeHtml {
+  if (summary.taxRegime === 'responsable_iva' || summary.ivaThreshold <= 0) return html``;
+  const percent = Math.min(100, Math.round((summary.yearCollected / summary.ivaThreshold) * 100));
+  const tone = percent >= 90 ? 'is-danger' : percent >= 80 ? 'is-warning' : '';
+  return html`<section class="card card-padded" style="margin-top: 16px; display: grid; gap: 8px">
+    <h3>${icon('scale')} Tope para no ser responsable de IVA <span class="hint" data-tooltip="Como persona natural no responsable de IVA, tus ingresos brutos del año deben ser menores a 3.500 UVT. Aquí solo se suma lo cobrado por Agenda Sonrisa: si tienes otros ingresos, súmalos tú. Si lo superas, consulta con un contador: debes inscribirte como responsable de IVA y facturar electrónicamente.">${icon('info')}</span></h3>
+    <div class="meter ${tone}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-label="Ingresos del año frente al tope"><span style="width: ${percent}%"></span></div>
+    <p class="subtle">${formatMoney(summary.yearCollected)} cobrados este año de ${formatMoney(summary.ivaThreshold)} (3.500 UVT) · ${percent}%.
+      ${percent >= 80 ? html`<strong>Te estás acercando al tope: habla con un contador.</strong>` : ''}</p>
+  </section>`;
+}

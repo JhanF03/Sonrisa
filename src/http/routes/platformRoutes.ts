@@ -18,7 +18,7 @@ import type { AppContext, AppEnv } from '../context.js';
 import { AppError } from '../errors.js';
 import { getSessionCookieName } from '../middleware.js';
 import { defineRoutes, publicAccess } from '../routeRegistry.js';
-import { hexColorSchema, httpsUrlSchema, localDateSchema, moneySchema, optionalText, positiveMoneySchema, readIdParam, readJsonBody, requiredText } from '../validation.js';
+import { faviconSchema, hexColorSchema, httpsUrlSchema, localDateSchema, moneySchema, optionalText, positiveMoneySchema, readIdParam, readJsonBody, requiredText } from '../validation.js';
 import { PASSWORD_POLICY } from './authRoutes.js';
 import { planSelectionSchema } from './selfServiceRoutes.js';
 
@@ -32,6 +32,7 @@ const clinicBaseSchema = z.object({
   phone: optionalText(30),
   brandColor: hexColorSchema.default('#2742a8'),
   logoUrl: httpsUrlSchema.nullable().optional().transform((value) => value ?? null),
+  favicon: faviconSchema.nullable().optional().transform((value) => value ?? null),
 });
 
 export function registerPlatformRoutes(app: Hono<AppEnv>): void {
@@ -213,7 +214,7 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       path: '/api/platform/tenants/:id/subscription',
       access: publicAccess,
       handler: async (context) => {
-        await assertPlatform(context);
+        const who = await assertPlatform(context);
         const input = await readJsonBody(
           context,
           z.object({
@@ -225,7 +226,7 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
             ownerNotes: optionalText(1000),
           }),
         );
-        return context.json(await context.get('services').platform.updateSubscription(readIdParam(context), input, context.get('clientIp')));
+        return context.json(await context.get('services').platform.updateSubscription(readIdParam(context), input, who));
       },
     },
     {
@@ -233,7 +234,7 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       path: '/api/platform/tenants/:id/payments',
       access: publicAccess,
       handler: async (context) => {
-        await assertPlatform(context);
+        const who = await assertPlatform(context);
         const input = await readJsonBody(
           context,
           z.object({
@@ -246,7 +247,7 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
         );
         const platform = context.get('services').platform;
         const tenantId = readIdParam(context);
-        await platform.registerPayment(tenantId, input, context.get('clientIp'));
+        await platform.registerPayment(tenantId, input, who);
         return context.json(await platform.getTenantOverview(tenantId), 201);
       },
     },
@@ -255,9 +256,9 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       path: '/api/platform/subscription-payments/:id/void',
       access: publicAccess,
       handler: async (context) => {
-        await assertPlatform(context);
+        const who = await assertPlatform(context);
         const { reason } = await readJsonBody(context, z.object({ reason: requiredText(200, 'El motivo') }));
-        await context.get('services').platform.voidPayment(readIdParam(context), reason, context.get('clientIp'));
+        await context.get('services').platform.voidPayment(readIdParam(context), reason, who);
         return context.json({ ok: true });
       },
     },
@@ -266,10 +267,10 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       path: '/api/platform/tenants/:id/demo-session',
       access: publicAccess,
       handler: async (context) => {
-        await requirePlatformAdmin(context);
+        const admin = await requirePlatformAdmin(context);
         const session = await context
           .get('services')
-          .platform.createDemoSession(readIdParam(context), context.get('clientIp'), context.req.header('User-Agent') ?? '');
+          .platform.createDemoSession(readIdParam(context), context.get('clientIp'), context.req.header('User-Agent') ?? '', admin.id);
         // Sesión normal del panel del consultorio (la misma cookie que al ingresar con usuario y contraseña).
         setCookie(context, getSessionCookieName(context.req.url), session.token, {
           httpOnly: true,
@@ -286,8 +287,8 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       path: '/api/platform/tenants/:id',
       access: publicAccess,
       handler: async (context) => {
-        await assertPlatform(context);
-        await context.get('services').platform.deleteDemo(readIdParam(context), context.get('clientIp'), 'dueno');
+        const who = await assertPlatform(context);
+        await context.get('services').platform.deleteDemo(readIdParam(context), who, 'dueno');
         return context.json({ ok: true });
       },
     },
@@ -296,10 +297,10 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       path: '/api/platform/tenants/:id/demo-expiry',
       access: publicAccess,
       handler: async (context) => {
-        await assertPlatform(context);
+        const who = await assertPlatform(context);
         const { days } = await readJsonBody(context, z.object({ days: z.number().int().min(1).max(365).nullable() }));
         const expiresAt = days === null ? null : new Date(Date.now() + days * 86_400_000).toISOString();
-        return context.json(await context.get('services').platform.setDemoExpiry(readIdParam(context), expiresAt, context.get('clientIp')));
+        return context.json(await context.get('services').platform.setDemoExpiry(readIdParam(context), expiresAt, who));
       },
     },
     {
@@ -316,7 +317,7 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       path: '/api/platform/plans',
       access: publicAccess,
       handler: async (context) => {
-        await assertPlatform(context);
+        const who = await assertPlatform(context);
         const money = moneySchema.max(100_000_000);
         const input = await readJsonBody(
           context,
@@ -341,7 +342,7 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
             annualFreeMonths: z.number().int().min(0).max(6),
           }),
         );
-        return context.json(await context.get('services').plans.saveCatalog(input, context.get('clientIp')));
+        return context.json(await context.get('services').plans.saveCatalog(input, who));
       },
     },
     {
@@ -349,8 +350,8 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       path: '/api/platform/tenants/:id/reset-admin-password',
       access: publicAccess,
       handler: async (context) => {
-        await assertPlatform(context);
-        return context.json(await context.get('services').platform.resetAdminPassword(readIdParam(context), context.get('clientIp')));
+        const who = await assertPlatform(context);
+        return context.json(await context.get('services').platform.resetAdminPassword(readIdParam(context), who));
       },
     },
     {
@@ -369,7 +370,7 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       path: '/api/platform/settings',
       access: publicAccess,
       handler: async (context) => {
-        await assertPlatform(context);
+        const who = await assertPlatform(context);
         const optionalSecret = z.string().trim().max(300).nullable().default(null).transform((value) => value || null);
         const input = await readJsonBody(
           context,
@@ -391,7 +392,7 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
             maxSelfDemos: z.number().int().min(0).max(500).optional(),
           }),
         );
-        return context.json(await context.get('services').platform.saveSettings(input, context.get('clientIp')));
+        return context.json(await context.get('services').platform.saveSettings(input, who));
       },
     },
     {
@@ -401,6 +402,114 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       handler: async (context) => {
         await assertPlatform(context);
         return context.json(await context.get('services').platform.testWompi());
+      },
+    },
+    // ─── Correo (Gmail del dueño) ───
+    {
+      method: 'GET',
+      path: '/api/platform/settings/mail',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        return context.json(await context.get('services').mail.getSettings());
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/api/platform/settings/mail',
+      access: publicAccess,
+      handler: async (context) => {
+        const who = await assertPlatform(context);
+        const input = await readJsonBody(
+          context,
+          z.object({
+            smtpUser: z.email('Correo de Gmail inválido.').max(200).nullable(),
+            // Contraseña de aplicación de Google: 16 letras (se aceptan con espacios). Vacía = conservar la guardada.
+            smtpPassword: z.string().trim().max(64).nullable().default(null).transform((value) => value || null)
+              .refine((value) => value === null || /^[a-z]{16}$/i.test(value.replace(/\s+/g, '')), 'La contraseña de aplicación de Google tiene 16 letras.'),
+            smtpFromName: optionalText(80),
+            notifyOwner: z.boolean().default(true),
+          }),
+        );
+        const services = context.get('services');
+        const saved = await services.mail.saveSettings(input);
+        await services.platform.recordAudit('configuracion_correo', null, { smtpUser: input.smtpUser, passwordChanged: Boolean(input.smtpPassword) }, who);
+        return context.json(saved);
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/platform/settings/mail/test',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        const { to } = await readJsonBody(context, z.object({ to: z.email('Correo inválido.').max(200) }));
+        await context.get('services').mail.sendTest(to);
+        return context.json({ message: `Correo de prueba enviado a ${to}.` });
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/platform/email-log',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        return context.json(await context.get('services').mail.listLog(200));
+      },
+    },
+
+    // ─── Datos legales y tributarios ───
+    {
+      method: 'GET',
+      path: '/api/platform/settings/legal',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        return context.json(await context.get('services').platform.getLegalSettings());
+      },
+    },
+    {
+      method: 'PUT',
+      path: '/api/platform/settings/legal',
+      access: publicAccess,
+      handler: async (context) => {
+        const who = await assertPlatform(context);
+        const input = await readJsonBody(
+          context,
+          z.object({
+            legalName: optionalText(120),
+            legalId: optionalText(30),
+            legalCity: optionalText(80),
+            legalEmail: z.email('Correo inválido.').max(200).nullable(),
+            taxRegime: z.enum(['no_responsable_iva', 'responsable_iva']),
+            uvtValue: z.number().int().min(10_000).max(1_000_000),
+            publicUrl: httpsUrlSchema.nullable(),
+          }),
+        );
+        const services = context.get('services');
+        const saved = await services.platform.saveLegalSettings(input, who);
+        services.mail.forgetCachedSettings(); // El correo de contacto se usa como "Responder a".
+        return context.json(saved);
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/platform/subscription-payments/:id/receipt',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        return context.json(await context.get('services').platform.getReceipt(readIdParam(context)));
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/platform/subscription-payments/:id/resend',
+      access: publicAccess,
+      handler: async (context) => {
+        await assertPlatform(context);
+        const services = context.get('services');
+        await services.notifications.paymentReceived(readIdParam(context));
+        return context.json({ message: 'Comprobante reenviado (revisa el registro de correos).' });
       },
     },
     {
@@ -419,21 +528,21 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       path: '/api/platform/showcase',
       access: publicAccess,
       handler: async (context) => {
-        await assertPlatform(context);
+        const who = await assertPlatform(context);
         const input = await readJsonBody(context, clinicBaseSchema.extend({ expiresInDays: z.number().int().min(1).max(365).nullable().default(null) }));
         const services = context.get('services');
 
         const demoPassword = `Demo-${generateSecureToken(9)}1`;
         const demoEmail = `demo-${generateSecureToken(6).toLowerCase().replace(/[^a-z0-9]/g, '')}@vitrina.agenda`;
         const { tenantId, slug, adminUserId } = await services.tenants.createTenant(
-          { name: input.clinicName, city: input.city, phone: input.phone, brandColor: input.brandColor, logoUrl: input.logoUrl, isShowcase: true },
+          { name: input.clinicName, city: input.city, phone: input.phone, brandColor: input.brandColor, logoUrl: input.logoUrl, favicon: input.favicon, isShowcase: true },
           { fullName: 'Administrador demo', email: demoEmail, passwordHash: await services.auth.hashNewPassword(demoPassword) },
         );
         const tenant = await services.tenants.getById(tenantId);
         await seedDemoData(context.get('db'), tenantId, tenant.utc_offset_minutes, adminUserId);
-        await services.platform.auditClinicCreated(tenantId, 'demo', context.get('clientIp'));
+        await services.platform.auditClinicCreated(tenantId, 'demo', who);
         if (input.expiresInDays) {
-          await services.platform.setDemoExpiry(tenantId, new Date(Date.now() + input.expiresInDays * 86_400_000).toISOString(), context.get('clientIp'));
+          await services.platform.setDemoExpiry(tenantId, new Date(Date.now() + input.expiresInDays * 86_400_000).toISOString(), who);
         }
 
         const origin = new URL(context.req.url).origin;
@@ -445,7 +554,7 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
       path: '/api/platform/clinics',
       access: publicAccess,
       handler: async (context) => {
-        await assertPlatform(context);
+        const who = await assertPlatform(context);
         const services = context.get('services');
         const defaults = await services.platform.getDefaults();
         const input = await readJsonBody(
@@ -463,13 +572,13 @@ export function registerPlatformRoutes(app: Hono<AppEnv>): void {
         const resolved = await services.plans.resolve({ planId: input.planId, addonModules: [], extraProfessionals: 0, extraUsers: 0 }, { allowInactivePlan: true });
         const { slug, tenantId } = await services.tenants.createTenant(
           {
-            name: input.clinicName, city: input.city, phone: input.phone, brandColor: input.brandColor, logoUrl: input.logoUrl,
+            name: input.clinicName, city: input.city, phone: input.phone, brandColor: input.brandColor, logoUrl: input.logoUrl, favicon: input.favicon,
             paidUntil: input.paidUntil, monthlyPrice: input.customPrice ?? resolved.monthlyPrice, graceDays: input.graceDays,
           },
           { fullName: input.adminFullName, email: input.adminEmail, passwordHash: await services.auth.hashNewPassword(input.adminPassword) },
         );
         await services.platform.setInitialPlan(tenantId, resolved, input.customPrice);
-        await services.platform.auditClinicCreated(tenantId, 'real', context.get('clientIp'));
+        await services.platform.auditClinicCreated(tenantId, 'real', who);
         const origin = new URL(context.req.url).origin;
         return context.json({ slug, bookingUrl: `${origin}/c/${slug}`, panelUrl: `${origin}/app`, paidUntil: input.paidUntil }, 201);
       },
@@ -488,10 +597,15 @@ async function requirePlatformAdmin(context: AppContext): Promise<PlatformAdmin>
  * Acceso a las operaciones del panel: sesión de dueño, o la clave maestra en
  * la cabecera X-Platform-Key (solo para automatizaciones y scripts).
  */
-async function assertPlatform(context: AppContext): Promise<void> {
+async function assertPlatform(context: AppContext): Promise<{ ip: string; adminId: string | null }> {
   const platformAuth = context.get('services').platformAuth;
-  if (await platformAuth.resolveSession(getCookie(context, platformCookieName(context.req.url)))) return;
+  const ip = context.get('clientIp');
+  const admin = await platformAuth.resolveSession(getCookie(context, platformCookieName(context.req.url)));
+  if (admin) return { ip, adminId: admin.id };
   const headerKey = context.req.header(PLATFORM_KEY_HEADER);
-  if (headerKey !== undefined) return platformAuth.assertMasterKey(headerKey, context.get('clientIp'));
+  if (headerKey !== undefined) {
+    await platformAuth.assertMasterKey(headerKey, ip);
+    return { ip, adminId: null }; // Automatización con la clave maestra.
+  }
   throw new AppError('Ingresa a la plataforma con tu correo y contraseña.', 401, 'PLATFORM_LOGIN_REQUIRED');
 }

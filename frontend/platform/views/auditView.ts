@@ -4,6 +4,7 @@
 import { api } from '../../core/api.js';
 import { html, setContent } from '../../core/dom.js';
 import { formatUtcAsLocal } from '../../core/format.js';
+import { auditDetails } from '../../core/auditFormat.js';
 import { emptyState, icon, refreshIcons } from '../../core/ui.js';
 import { OFFSET } from '../types.js';
 
@@ -25,19 +26,32 @@ const AUDIT_LABELS: Record<string, string> = {
   '2fa_activada': 'Verificación en dos pasos activada',
   '2fa_desactivada': 'Verificación en dos pasos desactivada',
   codigo_2fa_fallido: 'Código de verificación incorrecto',
+  demo_abierta: 'Panel de demo abierto',
+  demo_eliminada: 'Demo eliminada',
+  demo_vencida_borrada: 'Demo vencida borrada',
+  demo_vencimiento: 'Vencimiento de demo cambiado',
+  demo_autoservicio: 'Demo creada por un interesado',
+  registro_autoservicio: 'Consultorio registrado en línea',
+  ingreso_registro: 'Primer ingreso tras registrarse',
+  planes_editados: 'Planes y precios editados',
+  plan_cambiado: 'Plan cambiado',
+  cambio_plan_programado: 'Bajada de plan programada',
+  cambio_plan_cancelado: 'Cambio de plan cancelado',
+  configuracion_correo: 'Correo (Gmail) configurado',
+  datos_legales: 'Datos legales y tributarios editados',
 };
 
 export async function renderAuditView(content: HTMLElement): Promise<void> {
-  const rows = await api.get<Array<{ id: string; action: string; tenant_name: string | null; details: string | null; ip: string | null; created_at: string }>>('/api/platform/audit');
+  const rows = await api.get<Array<{ id: string; action: string; tenant_name: string | null; admin_name: string | null; details: string | null; ip: string | null; created_at: string }>>('/api/platform/audit');
   setContent(
     content,
     html`<section class="card">
-      <div class="card-header"><h3>${icon('scroll-text')} Lo que se hizo en la plataforma</h3></div>
+      <div class="card-header"><h3>${icon('scroll-text')} Lo que se hizo en la plataforma <span class="hint" data-tooltip="Este registro no se puede editar ni borrar: lo impide la base de datos.">${icon('info')}</span></h3></div>
       ${rows.length === 0
         ? emptyState('scroll-text', 'Sin registros', 'Aquí quedan los ingresos, pagos y cambios de la plataforma.')
         : html`<div class="table-wrapper"><table class="data-table">
-          <thead><tr><th>Fecha</th><th>Acción</th><th>Consultorio</th><th>IP</th></tr></thead>
-          <tbody>${rows.map((row) => html`<tr><td>${formatUtcAsLocal(row.created_at, OFFSET)}</td><td>${AUDIT_LABELS[row.action] ?? row.action}</td><td>${row.tenant_name ?? '—'}</td><td><small class="subtle">${row.ip ?? 'automático'}</small></td></tr>`)}</tbody>
+          <thead><tr><th>Fecha</th><th>Quién</th><th>Acción</th><th>Consultorio</th><th>Detalle</th><th>IP</th></tr></thead>
+          <tbody>${rows.map((row) => html`<tr><td class="nowrap">${formatUtcAsLocal(row.created_at, OFFSET)}</td><td>${row.admin_name ?? html`<span class="subtle">Sistema / interesado</span>`}</td><td>${AUDIT_LABELS[row.action] ?? row.action.replaceAll('_', ' ')}</td><td>${row.tenant_name ?? '—'}</td><td>${auditDetails(row.details)}</td><td><small class="subtle">${row.ip ?? 'automático'}</small></td></tr>`)}</tbody>
         </table></div>`}
     </section>`,
   );

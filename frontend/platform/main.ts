@@ -4,7 +4,7 @@
  * propio paquete y su propio ingreso (correo + contraseña + 2 pasos).
  *
  * Rutas (hash): #/resumen · #/consultorios · #/demos · #/crear · #/planes ·
- * #/configuracion · #/auditoria · #/cuenta · #/recuperar
+ * #/configuracion · #/correos · #/auditoria · #/cuenta · #/recuperar
  */
 import { logoTooth } from '../core/brand.js';
 import { api, ApiError } from '../core/api.js';
@@ -16,6 +16,7 @@ import { renderAccountView } from './views/accountView.js';
 import { renderAuditView } from './views/auditView.js';
 import { renderClinicsView } from './views/clinicsView.js';
 import { renderCreateView } from './views/createView.js';
+import { renderEmailLogView } from './views/emailLogView.js';
 import { renderPlansView } from './views/plansView.js';
 import { renderSettingsView } from './views/settingsView.js';
 import { renderSummaryView } from './views/summaryView.js';
@@ -33,6 +34,7 @@ const VIEWS = [
   { id: 'crear', label: 'Crear', iconName: 'plus' },
   { id: 'planes', label: 'Planes', iconName: 'crown' },
   { id: 'configuracion', label: 'Configuración', iconName: 'settings' },
+  { id: 'correos', label: 'Correos', iconName: 'mail' },
   { id: 'auditoria', label: 'Auditoría', iconName: 'scroll-text' },
   { id: 'cuenta', label: 'Mi cuenta', iconName: 'user' },
 ] as const;
@@ -80,6 +82,7 @@ async function renderPanel(admin: PlatformAdmin): Promise<void> {
     else if (viewId === 'crear') await renderCreateView(content);
     else if (viewId === 'planes') await renderPlansView(content);
     else if (viewId === 'configuracion') await renderSettingsView(content, reload);
+    else if (viewId === 'correos') await renderEmailLogView(content);
     else if (viewId === 'auditoria') await renderAuditView(content);
     else await renderAccountView(content, admin, reload);
   } catch (error) {

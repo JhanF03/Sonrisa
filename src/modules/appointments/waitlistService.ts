@@ -68,11 +68,15 @@ export class WaitlistService {
   }
 
   async resolve(actor: Actor, entryId: string): Promise<void> {
-    const result = await this.db
-      .prepare("UPDATE waitlist_entries SET status = 'resuelta' WHERE id = ? AND tenant_id = ? AND status = 'activa'")
-      .bind(entryId, actor.tenantId)
-      .run();
-    if (result.meta.changes === 0) throw notFound('La entrada de la lista de espera');
+    const active = await this.db.prepare("SELECT 1 FROM waitlist_entries WHERE id = ? AND tenant_id = ? AND status = 'activa'").bind(entryId, actor.tenantId).first();
+    if (!active) throw notFound('La entrada de la lista de espera');
+    const [result] = await this.db.batch([
+      this.db
+        .prepare("UPDATE waitlist_entries SET status = 'resuelta' WHERE id = ? AND tenant_id = ? AND status = 'activa'")
+        .bind(entryId, actor.tenantId),
+      this.audit.buildStatement(actor, { action: 'lista_espera_resuelta', entity: 'lista_espera', entityId: entryId }),
+    ]);
+    if ((result?.meta?.changes ?? 0) === 0) throw notFound('La entrada de la lista de espera');
   }
 
   private async assertBelongs(

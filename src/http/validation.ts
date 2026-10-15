@@ -97,3 +97,24 @@ export function readQuery<TSchema extends z.ZodType>(context: AppContext, schema
 export function readIdParam(context: AppContext, name = 'id'): string {
   return idSchema.parse(context.req.param(name));
 }
+
+/** Tamaño máximo del ícono de pestaña ya procesado (PNG 64×64 en base64). */
+export const MAX_FAVICON_CHARS = 40_000;
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+/**
+ * Ícono de la pestaña: solo PNG en data URL, pequeño y con la firma real de
+ * un PNG (no se acepta SVG ni otro formato que pueda llevar código).
+ */
+export const faviconSchema = z
+  .string()
+  .max(MAX_FAVICON_CHARS, 'El ícono es demasiado pesado. Usa una imagen más simple.')
+  .regex(/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/, 'El ícono debe ser una imagen PNG.')
+  .refine((value) => {
+    try {
+      const bytes = atob(value.slice('data:image/png;base64,'.length, 'data:image/png;base64,'.length + 12));
+      return PNG_SIGNATURE.every((byte, index) => bytes.charCodeAt(index) === byte);
+    } catch {
+      return false;
+    }
+  }, 'El archivo no es una imagen PNG válida.');
