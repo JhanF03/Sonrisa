@@ -1,8 +1,9 @@
 /**
- * Configuración por pestañas: consultorio, reglas de reserva en línea
+ * Configuración por grupos (submenú lateral): consultorio, reglas de reserva en línea
  * (anti-fantasma), WhatsApp, pagos en línea (Wompi), profesionales y bloqueos.
- * Cada pestaña se muestra solo si el usuario tiene el permiso correspondiente.
+ * Cada grupo se muestra solo si el usuario tiene el permiso correspondiente.
  */
+import { pickSection, sectionLayout, type SectionNavItem } from '../../core/sectionNav.js';
 import { api } from '../../core/api.js';
 import { applyFavicon, bindFaviconFields, faviconField } from '../../core/favicon.js';
 import { $, emptyToNull, html, readForm, safeUrl, setContent } from '../../core/dom.js';
@@ -78,34 +79,35 @@ interface TimeBlock {
 
 type SettingsTab = 'consultorio' | 'reservas' | 'whatsapp' | 'pagos' | 'profesionales' | 'bloqueos';
 
-const TABS: Array<{ id: SettingsTab; label: string; iconName: string; permission: string }> = [
-  { id: 'consultorio', label: 'Consultorio', iconName: 'building-2', permission: 'configuracion.consultorio' },
-  { id: 'reservas', label: 'Reservas en línea', iconName: 'shield', permission: 'configuracion.consultorio' },
-  { id: 'whatsapp', label: 'WhatsApp', iconName: 'message-circle', permission: 'configuracion.consultorio' },
-  { id: 'pagos', label: 'Pagos en línea', iconName: 'credit-card', permission: 'pagos.configurar' },
-  { id: 'profesionales', label: 'Profesionales', iconName: 'stethoscope', permission: 'configuracion.profesionales' },
-  { id: 'bloqueos', label: 'Bloqueos', iconName: 'ban', permission: 'agenda.bloquear' },
+const TABS: Array<SectionNavItem & { id: SettingsTab; permission: string }> = [
+  { id: 'consultorio', label: 'Consultorio', iconName: 'building-2', permission: 'configuracion.consultorio',
+    hint: 'Datos, logo, horario de citas', description: 'Nombre, contacto, imagen y cómo se reparte la agenda en el día.' },
+  { id: 'reservas', label: 'Reservas en línea', iconName: 'shield', permission: 'configuracion.consultorio',
+    hint: 'Reglas contra reservas falsas', description: 'Verificación del paciente, límites de citas pendientes y liberación automática de horarios.' },
+  { id: 'whatsapp', label: 'WhatsApp', iconName: 'message-circle', permission: 'configuracion.consultorio',
+    hint: 'Número y mensaje del recordatorio', description: 'El número del consultorio y el texto que reciben los pacientes al recordarles su cita.' },
+  { id: 'pagos', label: 'Pagos en línea', iconName: 'credit-card', permission: 'pagos.configurar',
+    hint: 'Tu cuenta de Wompi', description: 'Conecta tu Wompi para cobrar anticipos al reservar. El dinero llega directo a tu cuenta.' },
+  { id: 'profesionales', label: 'Profesionales', iconName: 'stethoscope', permission: 'configuracion.profesionales',
+    hint: 'Quién atiende y en qué horario', description: 'Cada profesional tiene su columna en la agenda y su horario semanal.' },
+  { id: 'bloqueos', label: 'Bloqueos', iconName: 'ban', permission: 'agenda.bloquear',
+    hint: 'Vacaciones, permisos, cierres', description: 'Horarios en los que no se pueden agendar citas.' },
 ];
 
 const WEEKDAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
 export async function renderSettingsView(container: HTMLElement, params: string[] = []): Promise<void> {
   const allowedTabs = TABS.filter((tab) => can(tab.permission));
-  const activeTab = allowedTabs.find((tab) => tab.id === params[0]) ?? allowedTabs[0];
+  const activeTab = pickSection(allowedTabs, params[0]);
   if (!activeTab) return;
 
-  setContent(
-    container,
-    html`<div class="tabs tabs-scroll" role="tablist">${allowedTabs.map(
-      (tab) => html`<a class="tab ${tab.id === activeTab.id ? 'is-active' : ''}" role="tab" href="#/configuracion/${tab.id}">${icon(tab.iconName)} ${tab.label}</a>`,
-    )}</div>
-    <div data-settings-content>${loadingState()}</div>`,
-  );
+  setContent(container, sectionLayout({ items: allowedTabs, active: activeTab, baseHref: '#/configuracion', label: 'Grupos de configuración' }));
   refreshIcons(container);
-  const content = $('[data-settings-content]', container);
+  const content = $('[data-section-content]', container);
+  setContent(content, loadingState());
   const reload = () => renderSettingsView(container, [activeTab.id]);
 
-  // Cada pestaña maneja sus propios eventos (se reemplazan al cambiar de pestaña).
+  // Cada grupo maneja sus propios eventos (se reemplazan al cambiar de grupo).
   content.onclick = null;
   content.onsubmit = null;
   content.oninput = null;
@@ -223,7 +225,7 @@ async function renderBookingRulesTab(content: HTMLElement, reload: () => Promise
             <span><strong>Sin verificación</strong> <span class="subtle">· la reserva queda pendiente y se confirma con el recordatorio.</span></span></label>
           <label class="checkbox"><input type="radio" name="onlineVerificationMode" value="whatsapp" ${clinic.online_verification_mode === 'whatsapp' ? 'checked' : ''} ${hasWhatsapp ? '' : 'disabled'} />
             <span><strong>Verificar por WhatsApp</strong> <span class="badge badge-success">Recomendado</span><br />
-              <span class="subtle">Al reservar, el paciente te escribe por WhatsApp con un código de 6 dígitos desde su celular. Si no lo hace a tiempo, el horario se libera solo. ${hasWhatsapp ? '' : html`<strong>Primero configura el número en la pestaña WhatsApp.</strong>`}</span></span></label>
+              <span class="subtle">Al reservar, el paciente te escribe por WhatsApp con un código de 6 dígitos desde su celular. Si no lo hace a tiempo, el horario se libera solo. ${hasWhatsapp ? '' : html`<strong>Primero configura el número en el grupo <a href="#/configuracion/whatsapp">WhatsApp</a>.</strong>`}</span></span></label>
         </div>
         <div class="form-grid">
           <label class="field"><span>${icon('hourglass')} Tiempo para verificar (minutos)</span>

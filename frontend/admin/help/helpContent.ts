@@ -503,7 +503,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
     ],
     tour: [
-      { target: TABS, title: 'Secciones', body: 'Cada pestaña configura una parte del consultorio. Solo ves las que tu rol permite.' },
+      { target: '.section-nav', title: 'Grupos', body: 'El menú de la izquierda separa cada parte de la configuración. Solo ves los grupos que tu rol permite.' },
       { target: ['form .button-primary', ...PRIMARY_BUTTON], title: 'Guardar', body: 'Los cambios se aplican al instante después de guardar.', optional: true },
     ],
   },

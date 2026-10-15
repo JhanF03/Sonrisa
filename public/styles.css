@@ -699,6 +699,38 @@ tr.is-muted td { opacity: 0.55; }
 .meter.is-danger > span { background: var(--danger); }
 .mail-steps { margin: 6px 0 4px; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; color: var(--text-muted); }
 
+/* ─── Submenú lateral de configuración ─────────────────────────────────── */
+.section-layout { display: grid; grid-template-columns: 252px minmax(0, 1fr); gap: 24px; align-items: start; }
+.section-nav { position: sticky; top: 16px; display: grid; gap: 2px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.section-link { position: relative; display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--radius-xs); color: var(--text-muted); text-decoration: none; transition: background var(--fast), color var(--fast); }
+.section-link:hover { background: var(--surface-muted); color: var(--text); }
+.section-link.is-active { background: var(--accent-soft); color: var(--text); }
+.section-link.is-active::before { content: ""; position: absolute; left: -6px; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.section-link-icon { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: var(--radius-xs); background: var(--surface-muted); }
+.section-link.is-active .section-link-icon { background: var(--surface); color: var(--accent); }
+.section-link-icon svg.icon { width: 18px; height: 18px; }
+.section-link-text { display: grid; gap: 1px; min-width: 0; }
+.section-link-text strong { font-size: 14px; font-weight: 600; }
+.section-link-text small { font-size: 12px; color: var(--text-subtle); line-height: 1.35; }
+.section-dot { width: 8px; height: 8px; margin-left: auto; flex-shrink: 0; border-radius: 50%; }
+.section-dot.is-ok { background: var(--success); }
+.section-dot.is-pendiente { background: #d29a1d; box-shadow: 0 0 0 3px var(--warning-soft); }
+.section-panel { min-width: 0; display: grid; gap: 16px; }
+.section-panel > [data-section-content] { display: grid; gap: 16px; }
+.section-panel > [data-section-content] > .card + .card { margin-top: 0 !important; }
+.section-head h2 { display: flex; align-items: center; gap: 10px; font-size: 21px; margin: 2px 0 4px; }
+.section-head h2 svg.icon { color: var(--accent); }
+.section-head p { margin: 0; max-width: 78ch; }
+@media (max-width: 960px) {
+  .section-layout { grid-template-columns: 1fr; gap: 14px; }
+  .section-nav { position: static; display: flex; overflow-x: auto; scrollbar-width: thin; padding: 4px; }
+  .section-link { flex-shrink: 0; padding: 7px 10px; }
+  .section-link-text small { display: none; }
+  .section-link-icon { width: 26px; height: 26px; }
+  .section-link.is-active::before { left: 10px; right: 10px; top: auto; bottom: -4px; width: auto; height: 3px; border-radius: 3px 3px 0 0; }
+  .section-dot { margin-left: 2px; }
+}
+
 /* ─── Responsive ───────────────────────────────────────────────────────── */
 @media (max-width: 960px) {
   .shell { grid-template-columns: 1fr; }

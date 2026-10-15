@@ -1,5 +1,5 @@
 /**
- * Configuración para que todo funcione sin ti:
+ * Grupos "Correo automático" y "Datos legales" de la configuración del dueño:
  *  • Correo: tu Gmail con una "contraseña de aplicación" envía bienvenidas,
  *    comprobantes de pago, recordatorios y enlaces para recuperar la contraseña.
  *  • Datos legales: aparecen en los términos, la política de datos, el pie de
@@ -10,14 +10,25 @@ import { $, emptyToNull, html, readForm, setContent } from '../../core/dom.js';
 import { icon, refreshIcons, toast, withErrorToast } from '../../core/ui.js';
 import type { LegalSettings, MailSettings } from '../types.js';
 
-export async function renderMailAndLegalSettings(container: HTMLElement): Promise<void> {
-  const [mail, legal] = await Promise.all([api.get<MailSettings>('/api/platform/settings/mail'), api.get<LegalSettings>('/api/platform/settings/legal')]);
+const submitWith = (form: HTMLFormElement, save: (values: Record<string, string>) => Promise<void>) =>
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const errorElement = $('.form-error', form);
+    errorElement.hidden = true;
+    try {
+      await save(readForm(form));
+    } catch (error) {
+      errorElement.textContent = error instanceof Error ? error.message : 'No se pudo guardar.';
+      errorElement.hidden = false;
+    }
+  });
+
+export function renderMailSection(container: HTMLElement, mail: MailSettings, reload: () => Promise<void>): void {
   setContent(
     container,
-    html`<section class="card card-padded" style="margin-top: 16px">
+    html`<section class="card card-padded">
       <form class="form" data-form="mail" novalidate>
-        <h3>${icon('mail')} Correo automático con tu Gmail <span class="badge ${mail.configured ? 'badge-success' : 'badge-neutral'}">${mail.configured ? 'Activo' : 'Inactivo'}</span>
-          <span class="hint" data-tooltip="Gratis: Gmail permite unos 500 correos al día. Se envían bienvenidas, datos de la demo, comprobantes de pago, recordatorios de vencimiento y enlaces para recuperar la contraseña. Puedes revisar cada envío en la pestaña Correos.">${icon('info')}</span></h3>
+        <h3>${icon('list-checks')} Paso a paso <span class="badge ${mail.configured ? 'badge-success' : 'badge-neutral'}">${mail.configured ? 'Activo' : 'Inactivo'}</span></h3>
         <ol class="mail-steps">
           <li>En tu cuenta de Google activa la <strong>Verificación en 2 pasos</strong> (Seguridad → Cómo inicias sesión en Google).</li>
           <li>Entra a <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">myaccount.google.com/apppasswords</a>, escribe "Agenda Sonrisa" y pulsa Crear.</li>
@@ -35,13 +46,36 @@ export async function renderMailAndLegalSettings(container: HTMLElement): Promis
         <div class="button-row">
           <button class="button button-primary" type="submit">${icon('check')} Guardar correo</button>
           <button class="button button-secondary" type="button" data-action="test-mail">${icon('send')} Enviar correo de prueba</button>
+          <a class="button button-ghost" href="#/correos">${icon('mail')} Ver correos enviados</a>
         </div>
       </form>
-    </section>
-    <section class="card card-padded" style="margin-top: 16px">
+    </section>`,
+  );
+  refreshIcons(container);
+  const mailForm = $('[data-form="mail"]', container) as HTMLFormElement;
+  submitWith(mailForm, async (values) => {
+    await api.put('/api/platform/settings/mail', {
+      smtpUser: emptyToNull(values.smtpUser),
+      smtpPassword: emptyToNull(values.smtpPassword),
+      smtpFromName: emptyToNull(values.smtpFromName),
+      notifyOwner: values.notifyOwner === '1',
+    });
+    toast('Correo guardado.', 'success');
+    await reload();
+  });
+  $('[data-action="test-mail"]', container).addEventListener('click', async () => {
+    const to = (mailForm.elements.namedItem('smtpUser') as HTMLInputElement).value || mail.smtpUser;
+    const result = await withErrorToast(() => api.post<{ message: string }>('/api/platform/settings/mail/test', { to }));
+    if (result) toast(result.message, 'success');
+  });
+}
+
+export function renderLegalSection(container: HTMLElement, legal: LegalSettings, reload: () => Promise<void>): void {
+  setContent(
+    container,
+    html`<section class="card card-padded">
       <form class="form" data-form="legal" novalidate>
-        <h3>${icon('scale')} Datos legales y tributarios <span class="hint" data-tooltip="Se publican en /legal/terminos, /legal/privacidad, el pie de la página de planes, Mi plan de cada consultorio y los comprobantes de pago.">${icon('info')}</span></h3>
-        <p class="subtle">Quien presta el servicio. Como persona natural usa tu nombre completo y tu cédula (o NIT si tienes RUT). Revisa los textos en <a href="/legal/terminos" target="_blank" rel="noopener">Términos</a> y <a href="/legal/privacidad" target="_blank" rel="noopener">Datos personales</a>.</p>
+                <p class="subtle">Quien presta el servicio. Como persona natural usa tu nombre completo y tu cédula (o NIT si tienes RUT). Revisa los textos en <a href="/legal/terminos" target="_blank" rel="noopener">Términos</a> y <a href="/legal/privacidad" target="_blank" rel="noopener">Datos personales</a>.</p>
         <div class="form-grid">
           <label class="field"><span>Nombre o razón social</span><input name="legalName" maxlength="120" value="${legal.providerName}" placeholder="Nombre completo" /></label>
           <label class="field"><span>Cédula o NIT</span><input name="legalId" maxlength="30" value="${legal.providerId}" placeholder="CC 1.234.567.890" /></label>
@@ -56,42 +90,11 @@ export async function renderMailAndLegalSettings(container: HTMLElement): Promis
           <label class="field full"><span>Dirección pública del sistema <span class="hint" data-tooltip="Con https://, sin barra al final. Se usa en los enlaces de los correos que salen desde las tareas automáticas (recordatorios). Ej.: https://agenda-sonrisa.tu-usuario.workers.dev">${icon('info')}</span></span><input name="publicUrl" maxlength="500" value="${legal.publicUrl}" placeholder="${window.location.origin}" /></label>
         </div>
         <p class="form-error" role="alert" hidden></p>
-        <button class="button button-primary" type="submit">${icon('check')} Guardar datos legales</button>
+        <div class="button-row"><button class="button button-primary" type="submit">${icon('check')} Guardar datos legales</button></div>
       </form>
     </section>`,
   );
   refreshIcons(container);
-
-  const submitWith = (form: HTMLFormElement, save: (values: Record<string, string>) => Promise<void>) =>
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const errorElement = $('.form-error', form);
-      errorElement.hidden = true;
-      try {
-        await save(readForm(form));
-      } catch (error) {
-        errorElement.textContent = error instanceof Error ? error.message : 'No se pudo guardar.';
-        errorElement.hidden = false;
-      }
-    });
-
-  const mailForm = $('[data-form="mail"]', container) as HTMLFormElement;
-  submitWith(mailForm, async (values) => {
-    await api.put('/api/platform/settings/mail', {
-      smtpUser: emptyToNull(values.smtpUser),
-      smtpPassword: emptyToNull(values.smtpPassword),
-      smtpFromName: emptyToNull(values.smtpFromName),
-      notifyOwner: values.notifyOwner === '1',
-    });
-    toast('Correo guardado.', 'success');
-    await renderMailAndLegalSettings(container);
-  });
-  $('[data-action="test-mail"]', container).addEventListener('click', async () => {
-    const to = (mailForm.elements.namedItem('smtpUser') as HTMLInputElement).value || mail.smtpUser;
-    const result = await withErrorToast(() => api.post<{ message: string }>('/api/platform/settings/mail/test', { to }));
-    if (result) toast(result.message, 'success');
-  });
-
   submitWith($('[data-form="legal"]', container) as HTMLFormElement, async (values) => {
     await api.put('/api/platform/settings/legal', {
       legalName: emptyToNull(values.legalName),
@@ -103,6 +106,6 @@ export async function renderMailAndLegalSettings(container: HTMLElement): Promis
       publicUrl: emptyToNull(values.publicUrl),
     });
     toast('Datos legales guardados.', 'success');
-    await renderMailAndLegalSettings(container);
+    await reload();
   });
 }

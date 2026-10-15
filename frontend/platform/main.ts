@@ -44,6 +44,8 @@ const root = document.getElementById('root') as HTMLElement;
 document.title = 'Plataforma · Agenda Sonrisa';
 
 const currentRoute = () => window.location.hash.replace(/^#\/?/, '').split('/')[0] ?? '';
+/** Lo que sigue a la vista en la URL (#/configuracion/correo → ['correo']). */
+const routeParams = () => window.location.hash.replace(/^#\/?/, '').split('/').slice(1).filter(Boolean);
 
 async function start(): Promise<void> {
   setContent(root, html`<main class="public-page">${loadingState()}</main>`);
@@ -81,7 +83,7 @@ async function renderPanel(admin: PlatformAdmin): Promise<void> {
     else if (viewId === 'demos') await renderClinicsView(content, reload, true);
     else if (viewId === 'crear') await renderCreateView(content);
     else if (viewId === 'planes') await renderPlansView(content);
-    else if (viewId === 'configuracion') await renderSettingsView(content, reload);
+    else if (viewId === 'configuracion') await renderSettingsView(content, reload, routeParams());
     else if (viewId === 'correos') await renderEmailLogView(content);
     else if (viewId === 'auditoria') await renderAuditView(content);
     else await renderAccountView(content, admin, reload);
